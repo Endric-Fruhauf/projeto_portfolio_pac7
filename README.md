@@ -177,33 +177,59 @@ O sistema segue uma arquitetura cliente-servidor composta por três componentes 
 
 ---
 
-# Roadmap
+# Status e Cronograma (PAC VII/VIII)
 
-## Fase 1
+### Semanas 1–3
 
-* Estruturação da API REST;
-* Modelagem do banco de dados;
-* Integração inicial com o iDFace.
+- Levantamento de requisitos do sistema;
+- Pesquisa sobre soluções de controle de acesso;
+- Estudo da API do Control iD iDFace;
+- Modelagem inicial do banco de dados MySQL;
+- Definição da arquitetura cliente-servidor;
+- Elaboração da documentação inicial do projeto.
 
-## Fase 2
+### Semanas 4–7
 
-* Cadastro e gerenciamento de usuários;
-* Registro de acessos;
-* Controle de permissões.
+- Desenvolvimento da API REST em Python;
+- Estruturação do banco de dados;
+- Implementação do cadastro de usuários;
+- Desenvolvimento do sistema de permissões administrativas;
+- Testes iniciais das rotas da API;
+- Atualização da documentação técnica.
 
-## Fase 3
+### Semanas 8–12
 
-* Interface administrativa;
-* Abertura remota da porta;
-* Testes de integração.
+- Integração entre o servidor local e o Control iD iDFace;
+- Sincronização de usuários entre sistema e dispositivo;
+- Registro automatizado dos eventos de acesso;
+- Implementação das regras de autenticação;
+- Validação da comunicação entre dispositivo e servidor;
+- Atualização da documentação do projeto.
 
-## Fase 4
+### Semanas 13–15
 
-* Relatórios;
-* Otimizações;
-* Documentação final do projeto.
+- Desenvolvimento do painel administrativo web;
+- Consulta e filtragem de registros de acesso;
+- Gerenciamento de usuários;
+- Implementação da abertura remota da porta;
+- Refinamento da interface;
+- Atualização da documentação técnica.
 
----
+### Semanas 16–18
+
+- Testes de integração entre todos os componentes;
+- Correção de falhas identificadas;
+- Otimização de desempenho;
+- Validação dos requisitos funcionais;
+- Atualização da documentação do projeto.
+
+### Semanas 19–20
+
+- Consolidação dos resultados obtidos;
+- Revisão do artigo e da documentação;
+- Ajustes solicitados pelo orientador;
+- Preparação da apresentação final;
+- Entrega do projeto.
 
 # Autor
 
