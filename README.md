@@ -130,7 +130,7 @@ O sistema segue uma arquitetura cliente-servidor composta por três componentes 
 
 # Estrutura do Projeto
 
-![Arquitetura do Sistema](docs/arquitetura.png.png)
+![Arquitetura do Sistema](images/arquitetura.png)
 
 # Principais Funcionalidades
 
