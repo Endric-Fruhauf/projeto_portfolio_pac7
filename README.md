@@ -22,13 +22,13 @@ Atualmente, o acesso ao laboratório depende da utilização de chaves físicas.
 
 Esse modelo apresenta algumas limitações:
 
-* Quantidade limitada de cópias da chave;
-* Dependência de membros específicos para liberar acesso;
-* Possibilidade de perda ou esquecimento das chaves;
-* Dificuldade para identificar quem acessou o ambiente;
-* Ausência de registros centralizados de entrada e saída.
+- Quantidade limitada de cópias da chave;
+- Dependência de membros específicos para liberar acesso;
+- Possibilidade de perda ou esquecimento das chaves;
+- Dificuldade para identificar quem acessou o ambiente;
+- Ausência de registros centralizados de entrada e saída.
 
-Essas situações podem dificultar o acesso dos membros ao laboratório e reduzir a rastreabilidade dos acessos realizados.
+Essas situações impactam diretamente a rastreabilidade e o controle de acesso ao ambiente.
 
 ---
 
@@ -36,9 +36,9 @@ Essas situações podem dificultar o acesso dos membros ao laboratório e reduzi
 
 O sistema proposto substitui a autenticação baseada em chaves físicas por reconhecimento facial.
 
-Os membros autorizados podem acessar o ambiente utilizando apenas sua biometria facial cadastrada no dispositivo.
+Os membros autorizados podem acessar o ambiente utilizando sua biometria facial cadastrada no dispositivo.
 
-Além disso, administradores possuem acesso a uma interface de gerenciamento que permite controlar usuários, visualizar registros de acesso e realizar ações administrativas de forma centralizada.
+Além disso, administradores possuem uma interface de gerenciamento que permite controlar usuários, visualizar registros de acesso e realizar ações administrativas de forma centralizada.
 
 ---
 
@@ -46,16 +46,14 @@ Além disso, administradores possuem acesso a uma interface de gerenciamento que
 
 O equipamento Control iD iDFace já oferece recursos de autenticação facial, porém seu software é uma solução genérica voltada para diferentes cenários de mercado.
 
-O Wickedbotz Access Control System atua como uma camada complementar de gerenciamento, oferecendo funcionalidades adaptadas às necessidades da equipe, como:
+O Wickedbotz Access Control System atua como uma camada complementar de gerenciamento, oferecendo funcionalidades adaptadas às necessidades da equipe:
 
-* Controle simplificado de membros;
-* Registro centralizado de acessos;
-* Controle de permissões administrativas;
-* Abertura remota da porta;
-* Maior flexibilidade para futuras personalizações;
-* Operação totalmente local.
-
-Dessa forma, o projeto aproveita a robustez do dispositivo iDFace enquanto oferece uma experiência personalizada para a equipe.
+- Controle simplificado de membros;
+- Registro centralizado de acessos;
+- Controle de permissões administrativas;
+- Abertura remota da porta;
+- Operação totalmente local;
+- Maior flexibilidade para personalizações futuras.
 
 ---
 
@@ -65,71 +63,74 @@ O sistema segue uma arquitetura cliente-servidor composta por três componentes 
 
 ## Dispositivo de Acesso
 
-* Control iD iDFace
-* Reconhecimento facial
-* Validação biométrica dos usuários
+- Control iD iDFace
+- Reconhecimento facial
+- Validação biométrica dos usuários
 
 ## Comunicação Local
 
-* Conexão via rede local (Ethernet)
-* Comunicação direta entre iDFace e servidor
-* Operação sem dependência de serviços externos
+- Rede local (Ethernet)
+- Comunicação direta entre iDFace e servidor
+- Operação sem dependência de serviços externos
 
 ## Servidor Local
 
-* API REST
-* Gerenciamento de usuários
-* Controle de permissões
-* Registro de acessos
-* Persistência de dados
+- API REST em Python (Flask)
+- Gerenciamento de usuários
+- Controle de permissões
+- Registro de acessos
+- Persistência de dados
 
 ## Interface Administrativa
 
-* Cadastro de usuários
-* Consulta de acessos
-* Controle administrativo
-* Abertura remota da porta
+- Cadastro de usuários
+- Consulta de acessos
+- Controle administrativo
+- Abertura remota da porta
 
 ---
-
 # Fluxo de Funcionamento
 
-1. O usuário aproxima-se do dispositivo iDFace.
-2. O equipamento realiza a identificação facial.
-3. O iDFace comunica o evento ao servidor local através da rede interna.
-4. O servidor registra o acesso no banco de dados.
-5. As informações ficam disponíveis no painel administrativo.
-6. Administradores podem consultar históricos e realizar ações administrativas, como a abertura remota da porta.
-
+1. O usuário aproxima-se do dispositivo iDFace;
+2. O equipamento realiza a identificação facial;
+3. Caso a autenticação seja validada, o dispositivo libera a abertura da porta;
+4. O iDFace comunica o evento ao servidor local através da rede interna;
+5. O servidor registra o acesso no banco de dados;
+6. As informações ficam disponíveis no painel administrativo;
+7. Administradores podem consultar históricos de acesso e realizar ações administrativas, como a abertura remota da porta.
 ---
 
 # Tecnologias Utilizadas
 
 ## Back-end
 
-* Python
-* Flask
-* REST API
+- Python
+- Flask
+- REST API
 
 ## Banco de Dados
 
-* MySQL
+- MySQL
 
 ## Hardware
 
-* Control iD iDFace
+- Control iD iDFace
 
 ## Infraestrutura
 
-* Rede Local (Ethernet)
-* Servidor Local
+- Rede Local (Ethernet)
+- Servidor Local
 
 ## Comunicação
 
-* HTTP/HTTPS
-* Integração via API Control iD
+- HTTP/HTTPS
+- Integração via API Control iD
 
 ---
+
+# Estrutura do Projeto
+
+![Arquitetura do Sistema](docs/arquitetura.png)
 
 # Principais Funcionalidades
 
@@ -151,33 +152,92 @@ O sistema segue uma arquitetura cliente-servidor composta por três componentes 
 
 ---
 
+# API (Resumo de Endpoints)
+
+| Método | Endpoint | Função |
+|----------|----------|----------|
+| POST | /users | Cadastro de usuários |
+| GET | /users | Listagem de usuários |
+| PUT | /users/{id} | Atualização de usuários |
+| DELETE | /users/{id} | Remoção de usuários |
+| POST | /access/log | Registro de acesso |
+| POST | /auth/facial | Autenticação facial |
+| POST | /door/open | Abertura remota da porta |
+
+---
+
+# Modelo de Dados (Resumo)
+
+## users
+
+- id
+- nome
+- id_facial
+- permissao
+
+## access_logs
+
+- id
+- user_id
+- data_hora
+- resultado
+
+## permissions
+
+- id
+- tipo
+- descricao
+
+---
+
 # Diferenciais
 
-* Eliminação da dependência de chaves físicas;
-* Comunicação totalmente local entre dispositivo e servidor;
-* Registro centralizado dos acessos;
-* Operação sem dependência de serviços em nuvem;
-* Interface adaptada à realidade da equipe Wickedbotz;
-* Controle administrativo simplificado;
-* Abertura remota da porta;
-* Possibilidade de personalização futura.
+- Eliminação da dependência de chaves físicas;
+- Comunicação totalmente local entre dispositivo e servidor;
+- Registro centralizado dos acessos;
+- Operação sem dependência de serviços em nuvem;
+- Interface adaptada à realidade da equipe Wickedbotz;
+- Controle administrativo simplificado;
+- Abertura remota da porta;
+- Possibilidade de personalização futura.
+
+---
+
+# Limitações do Sistema
+
+- Dependência do hardware Control iD iDFace;
+- Escalabilidade limitada em ambientes com múltiplos pontos de acesso;
+- Dependência da infraestrutura de rede local;
+- Possíveis falhas de reconhecimento em condições inadequadas de iluminação;
+- Possibilidade de falsos positivos ou falsos negativos inerentes à biometria facial.
 
 ---
 
 # Possíveis Evoluções Futuras
 
-* Aplicativo mobile para administradores;
-* Notificações em tempo real;
-* Dashboard com estatísticas de acesso;
-* Relatórios avançados;
-* Exportação de registros em PDF e Excel;
-* Sistema de visitantes temporários;
-* Backup automatizado dos registros;
-* Melhorias de usabilidade e experiência do usuário.
+- Aplicativo mobile para administradores;
+- Notificações em tempo real;
+- Dashboard com estatísticas de acesso;
+- Relatórios avançados;
+- Exportação de registros em PDF e Excel;
+- Sistema de visitantes temporários;
+- Backup automatizado dos registros;
+- Melhorias de usabilidade e experiência do usuário.
 
 ---
 
-# Status e Cronograma (PAC VII/VIII)
+# Status do Projeto
+
+## Em Desenvolvimento
+
+- Levantamento de requisitos concluído;
+- Arquitetura definida;
+- Modelagem do banco de dados em andamento;
+- Estudo da API Control iD iDFace em andamento;
+- Desenvolvimento da API REST previsto no cronograma.
+
+
+# Cronograma (PAC VII/VIII)
 
 ### Semanas 1–3
 
@@ -231,7 +291,10 @@ O sistema segue uma arquitetura cliente-servidor composta por três componentes 
 - Preparação da apresentação final;
 - Entrega do projeto.
 
+---
+
 # Autor
 
 **Endric Fruhauf**
+
 Projeto desenvolvido para a disciplina PAC VII/VIII do Centro Universitário Católica de Santa Catarina.
