@@ -1,0 +1,233 @@
+
+/* =====================================
+   ESTRUTURA DO PAINEL
+===================================== */
+
+.dashboard-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+
+/* =====================================
+   MENU LATERAL
+===================================== */
+
+.sidebar {
+    width: 260px;
+    min-height: 100vh;
+    background-color: #1f2937;
+    display: flex;
+    flex-direction: column;
+    padding: 25px 18px;
+    flex-shrink: 0;
+}
+
+.sidebar-header {
+    padding: 10px 12px 30px;
+    border-bottom: 1px solid #374151;
+}
+
+.sidebar-header h1 {
+    font-size: 24px;
+    margin-bottom: 6px;
+}
+
+.sidebar-header p {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+.sidebar-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 25px;
+}
+
+.menu-item {
+    display: block;
+    padding: 13px 14px;
+    border-radius: 7px;
+    color: #d1d5db;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+    background-color: #374151;
+}
+
+.menu-item.active {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+
+
+/* =====================================
+   RODAPÉ DO MENU
+===================================== */
+
+.sidebar-footer {
+    margin-top: auto;
+    padding: 20px 12px 5px;
+    border-top: 1px solid #374151;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sidebar-footer span {
+    color: #9ca3af;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.sidebar-footer a {
+    color: #f87171;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.sidebar-footer a:hover {
+    color: #ef4444;
+}
+
+
+/* =====================================
+   CONTEÚDO PRINCIPAL
+===================================== */
+
+.main-content {
+    flex: 1;
+    min-width: 0;
+    padding: 35px;
+}
+
+.content-header {
+    padding-bottom: 25px;
+    border-bottom: 1px solid #374151;
+}
+
+.content-header h2 {
+    font-size: 26px;
+    margin-bottom: 8px;
+}
+
+.content-header p {
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+
+/* =====================================
+   PÁGINA INICIAL
+===================================== */
+
+.welcome-section {
+    margin-top: 30px;
+    background-color: #1f2937;
+    padding: 30px;
+    border-radius: 10px;
+}
+
+.welcome-section h3 {
+    font-size: 20px;
+    margin-bottom: 12px;
+}
+
+.welcome-section p {
+    color: #9ca3af;
+    line-height: 1.6;
+    font-size: 14px;
+}
+
+
+/* =====================================
+   RESPONSIVIDADE - TABLETS
+===================================== */
+
+@media (max-width: 900px) {
+
+    .sidebar {
+        width: 220px;
+    }
+
+    .main-content {
+        padding: 25px;
+    }
+
+}
+
+
+/* =====================================
+   RESPONSIVIDADE - CELULARES
+===================================== */
+
+@media (max-width: 600px) {
+
+    .dashboard-container {
+        flex-direction: column;
+    }
+
+    .sidebar {
+        width: 100%;
+        min-height: auto;
+        padding: 15px;
+    }
+
+    .sidebar-header {
+        padding: 5px 5px 15px;
+    }
+
+    .sidebar-header h1 {
+        font-size: 21px;
+    }
+
+    .sidebar-menu {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 15px;
+    }
+
+    .menu-item {
+        padding: 10px;
+        font-size: 12px;
+    }
+
+    .sidebar-footer {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 15px;
+        padding: 15px 5px 0;
+    }
+
+    .main-content {
+        padding: 20px 15px;
+    }
+
+    .content-header h2 {
+        font-size: 22px;
+    }
+
+    .welcome-section {
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+}
+
+
+/* CELULARES PEQUENOS */
+
+@media (max-width: 380px) {
+
+    .menu-item {
+        font-size: 11px;
+        padding: 9px;
+    }
+
+}

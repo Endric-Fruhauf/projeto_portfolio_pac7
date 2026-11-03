@@ -1,0 +1,92 @@
+
+/* =====================================
+   TELA DE LOGIN
+===================================== */
+
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.login-container {
+    background-color: #1f2937;
+    width: 100%;
+    max-width: 350px;
+    padding: 40px;
+    border-radius: 12px;
+    margin: 20px;
+}
+
+.login-container h1,
+.login-container h2 {
+    text-align: center;
+}
+
+.login-container h1 {
+    margin-bottom: 10px;
+}
+
+.login-container h2 {
+    font-size: 16px;
+    font-weight: normal;
+    color: #9ca3af;
+    margin-bottom: 30px;
+}
+
+.login-container label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.login-container input {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 20px;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    background-color: #111827;
+    color: white;
+}
+
+.login-container input:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.login-container button {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 6px;
+    background-color: #2563eb;
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.login-container button:hover {
+    background-color: #1d4ed8;
+}
+
+.mensagem-erro {
+    color: #f87171;
+    font-size: 14px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+
+/* =====================================
+   RESPONSIVIDADE
+===================================== */
+
+@media (max-width: 380px) {
+
+    .login-container {
+        padding: 25px;
+    }
+
+}

@@ -1,0 +1,177 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Wickedbotz - Usuários</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/usuarios.css') }}">
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <!-- MENU LATERAL -->
+        <aside class="sidebar">
+
+            <div class="sidebar-header">
+                <h1>Wickedbotz</h1>
+                <p>Painel Administrativo</p>
+            </div>
+
+            <nav class="sidebar-menu">
+
+                <a href="{{ url_for('painel') }}" class="menu-item">
+                    Início
+                </a>
+
+                <a href="{{ url_for('usuarios') }}" class="menu-item active">
+                    Usuários
+                </a>
+
+                <a href="#" class="menu-item">
+                    Registros de acesso
+                </a>
+
+                <a href="#" class="menu-item">
+                    Administradores
+                </a>
+
+            </nav>
+
+            <div class="sidebar-footer">
+                <span>Olá, {{ session['admin_nome'] }}</span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+
+        </aside>
+
+
+        <!-- CONTEÚDO PRINCIPAL -->
+        <main class="main-content">
+
+            <header class="content-header">
+                <div>
+                    <h2>Gerenciamento de usuários</h2>
+                    <p>Consulte e gerencie os usuários do sistema.</p>
+                </div>
+            </header>
+
+
+            <!-- MENSAGEM DE ERRO -->
+            {% if erro %}
+                <p class="mensagem-erro">{{ erro }}</p>
+            {% endif %}
+
+
+            <!-- PESQUISA E NOVO USUÁRIO -->
+            <section class="users-actions">
+
+                <div class="users-search">
+                    <input
+                        type="search"
+                        placeholder="Pesquisar por nome..."
+                        aria-label="Pesquisar usuários"
+                    >
+                </div>
+
+                <a href="{{ url_for('novo_usuario') }}" class="btn-primary">
+                    + Novo usuário
+                </a>
+
+            </section>
+
+
+            <!-- TABELA DE USUÁRIOS -->
+            <section class="users-table-container">
+
+                <div class="table-header">
+                    <h3>Usuários cadastrados</h3>
+                </div>
+
+                <div class="table-responsive">
+
+                    <table class="users-table">
+
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nome</th>
+                                <th>Categoria</th>
+                                <th>ID iDFace</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+
+                            {% for usuario in usuarios %}
+
+                                <tr>
+                                    <td>{{ usuario.id }}</td>
+
+                                    <td>{{ usuario.nome }}</td>
+
+                                    <td>
+                                        {% if usuario.categoria == 'administrador' %}
+                                            Administrador
+                                        {% else %}
+                                            Membro
+                                        {% endif %}
+                                    </td>
+
+                                    <td>
+                                        {{ usuario.id_idface if usuario.id_idface is not none else '-' }}
+                                    </td>
+
+                                    <td class="user-actions">
+
+                                        <a
+                                            href="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+                                            class="btn-edit"
+                                        >
+                                            Editar
+                                        </a>
+
+                                        <form
+                                            action="{{ url_for('excluir_usuario', id_usuario=usuario.id) }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Tem certeza de que deseja excluir este usuário? Essa ação também o removerá do iDFace. O histórico de acessos será preservado.');"
+                                        >
+                                            <button type="submit" class="btn-delete">
+                                                Excluir
+                                            </button>
+                                        </form>
+
+                                    </td>
+                                </tr>
+
+                            {% else %}
+
+                                <tr>
+                                    <td colspan="5" class="empty-table">
+                                        Nenhum usuário cadastrado.
+                                    </td>
+                                </tr>
+
+                            {% endfor %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+            </section>
+
+        </main>
+
+    </div>
+
+</body>
+</html>

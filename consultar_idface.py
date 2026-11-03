@@ -1,95 +1,103 @@
 
 import requests
-import msvcrt
+import json
+import config
 
-IP = "192.168.0.129"
-BASE_URL = f"http://{IP}"
-
-
-def digitar_senha():
-    print("Senha do iDFace: ", end="", flush=True)
-    senha = ""
-
-    while True:
-        tecla = msvcrt.getwch()
-
-        if tecla == "\r":
-            print()
-            break
-
-        elif tecla == "\b":
-            if senha:
-                senha = senha[:-1]
-                print("\b \b", end="", flush=True)
-
-        elif tecla in ("\x00", "\xe0"):
-            msvcrt.getwch()
-
-        else:
-            senha += tecla
-            print("*", end="", flush=True)
-
-    return senha
+BASE_URL = f"http://{config.IDFACE_IP}"
 
 
-def consultar_usuarios():
-    usuario = input("Usuário do iDFace: ")
-    senha = digitar_senha()
+def consultar_objeto(sessao, objeto):
+    resposta = requests.post(
+        f"{BASE_URL}/load_objects.fcgi?session={sessao}",
+        json={"object": objeto},
+        timeout=10
+    )
+
+    resposta.raise_for_status()
+    return resposta.json().get(objeto, [])
+
+
+def consultar_idface():
+    sessao = None
 
     try:
-        # Autenticação
+        print("Conectando ao iDFace...")
+
         resposta = requests.post(
             f"{BASE_URL}/login.fcgi",
             json={
-                "login": usuario,
-                "password": senha
+                "login": config.IDFACE_USUARIO,
+                "password": config.IDFACE_SENHA
             },
             timeout=10
         )
 
         resposta.raise_for_status()
-        resultado = resposta.json()
-
-        sessao = resultado.get("session")
+        sessao = resposta.json().get("session")
 
         if not sessao:
-            print("Não foi possível obter a sessão.")
+            print("Não foi possível autenticar.")
             return
 
-        print("\nAutenticação realizada com sucesso!")
+        print("Autenticação realizada com sucesso!")
 
-        # Consulta de usuários
-        consulta = requests.post(
-            f"{BASE_URL}/load_objects.fcgi?session={sessao}",
-            json={
-                "object": "users"
-            },
-            timeout=10
-        )
+        usuarios = consultar_objeto(sessao, "users")
+        privilegios = consultar_objeto(sessao, "user_roles")
 
-        consulta.raise_for_status()
+        print("\n========== USUÁRIOS ==========")
+        print(json.dumps(
+            usuarios,
+            indent=4,
+            ensure_ascii=False
+        ))
 
-        dados = consulta.json()
+        print("\n========== PRIVILÉGIOS ==========")
+        print(json.dumps(
+            privilegios,
+            indent=4,
+            ensure_ascii=False
+        ))
 
-        print("\nConsulta realizada!")
-        print("Resposta da API:")
-
-        usuarios = dados.get("users", [])
-
-        print("Quantidade de usuários:", len(usuarios))
+        print("\n========== RESUMO ==========")
 
         for usuario in usuarios:
+            usuario_id = usuario.get("id")
+
+            administrador = any(
+                privilegio.get("user_id") == usuario_id
+                and privilegio.get("role") == 1
+                for privilegio in privilegios
+            )
+
+            categoria = (
+                "ADMINISTRADOR"
+                if administrador
+                else "MEMBRO"
+            )
+
             print(
-                "ID:", usuario.get("id"),
-                "| Nome:", usuario.get("name")
+                f"ID: {usuario_id} | "
+                f"Nome: {usuario.get('name')} | "
+                f"Categoria: {categoria}"
             )
 
     except requests.exceptions.RequestException as erro:
         print("\nErro na comunicação:", erro)
 
     except ValueError:
-        print("\nA resposta da API não é um JSON válido.")
+        print("\nResposta inválida da API.")
+
+    finally:
+        if sessao:
+            try:
+                requests.post(
+                    f"{BASE_URL}/logout.fcgi?session={sessao}",
+                    timeout=5
+                )
+                print("\nSessão encerrada.")
+            except requests.exceptions.RequestException:
+                pass
 
 
 if __name__ == "__main__":
-    consultar_usuarios()
+    consultar_idface()

@@ -1,16 +1,28 @@
 
-import requests
-import config
+from idface import IDFaceClient, IDFaceError
 
-URL = f"http://{config.IDFACE_IP}"
 
-try:
-    resposta = requests.get(URL, timeout=5)
+def testar_conexao():
+    try:
+        with IDFaceClient() as idface:
+            print("Conexão com iDFace estabelecida!")
 
-    print("Conexao estabelecida!")
-    print("Status HTTP:", resposta.status_code)
-    print("Servidor respondeu corretamente.")
+            usuarios = idface.consultar_usuarios()
 
-except requests.exceptions.RequestException as erro:
-    print("Erro na comunicacao:")
-    print(erro)
+            print(f"\nUsuários encontrados: {len(usuarios)}")
+
+            for usuario in usuarios:
+                print(
+                    f"ID: {usuario.get('id')} | "
+                    f"Nome: {usuario.get('name')} | "
+                    f"ID iDFace: {usuario.get('id')}"
+                )
+
+        print("\nTeste concluído com sucesso!")
+
+    except IDFaceError as erro:
+        print("\nFalha no teste:", erro)
+
+
+if __name__ == "__main__":
+    testar_conexao()

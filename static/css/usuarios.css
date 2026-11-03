@@ -1,0 +1,205 @@
+
+/* =====================================
+   AÇÕES E PESQUISA
+===================================== */
+
+.users-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    margin-top: 30px;
+    margin-bottom: 25px;
+}
+
+.users-search {
+    flex: 1;
+    max-width: 400px;
+}
+
+.users-search input {
+    width: 100%;
+    padding: 12px 15px;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 7px;
+    color: #fff;
+    font-size: 14px;
+}
+
+.users-search input:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.users-search input::placeholder {
+    color: #9ca3af;
+}
+
+.btn-primary {
+    display: inline-block;
+    padding: 12px 18px;
+    background-color: #2563eb;
+    color: #fff;
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.2s;
+    white-space: nowrap;
+}
+
+.btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+
+/* =====================================
+   TABELA DE USUÁRIOS
+===================================== */
+
+.users-table-container {
+    background-color: #1f2937;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 20px;
+}
+
+.table-header {
+    padding: 22px;
+    border-bottom: 1px solid #374151;
+}
+
+.table-header h3 {
+    font-size: 17px;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.users-table th,
+.users-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid #374151;
+    font-size: 14px;
+}
+
+.users-table th {
+    color: #9ca3af;
+    font-weight: 600;
+    background-color: #1a2433;
+}
+
+.users-table td {
+    color: #e5e7eb;
+}
+
+.users-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.users-table tbody tr:hover {
+    background-color: #263449;
+}
+
+.empty-table {
+    text-align: center;
+    padding: 30px !important;
+    color: #9ca3af !important;
+}
+
+
+/* =====================================
+   BOTÕES DE AÇÃO
+===================================== */
+
+.user-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.user-actions form {
+    margin: 0;
+}
+
+.btn-edit,
+.btn-delete {
+    display: inline-block;
+    padding: 8px 12px;
+    border: none;
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-edit {
+    background-color: #1d4ed8;
+    color: #fff;
+}
+
+.btn-edit:hover {
+    background-color: #1e40af;
+}
+
+.btn-delete {
+    background-color: #991b1b;
+    color: #fff;
+}
+
+.btn-delete:hover {
+    background-color: #7f1d1d;
+}
+
+
+/* =====================================
+   MENSAGEM DE ERRO
+===================================== */
+
+.mensagem-erro {
+    padding: 12px;
+    margin-top: 20px;
+    background-color: #451a1a;
+    border: 1px solid #7f1d1d;
+    border-radius: 7px;
+    color: #fca5a5;
+    font-size: 14px;
+}
+
+
+/* =====================================
+   RESPONSIVIDADE
+===================================== */
+
+@media (max-width: 600px) {
+
+    .users-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .users-search {
+        max-width: none;
+    }
+
+    .users-actions .btn-primary {
+        text-align: center;
+    }
+
+    .users-table th,
+    .users-table td {
+        padding: 12px;
+    }
+
+}

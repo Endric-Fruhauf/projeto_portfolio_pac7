@@ -1,0 +1,51 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wickedbotz - Login</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+</head>
+
+<body>
+
+    <div class="login-container">
+
+        <h1>Wickedbotz</h1>
+        <h2>Painel Administrativo</h2>
+
+        {% if erro %}
+            <p class="mensagem-erro">{{ erro }}</p>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('login') }}">
+
+            <label for="usuario">Usuário</label>
+            <input
+                type="text"
+                id="usuario"
+                name="usuario"
+                placeholder="Digite seu usuário"
+                required
+            >
+
+            <label for="senha">Senha</label>
+            <input
+                type="password"
+                id="senha"
+                name="senha"
+                placeholder="Digite sua senha"
+                required
+            >
+
+            <button type="submit">Entrar</button>
+
+        </form>
+
+    </div>
+
+</body>
+</html>

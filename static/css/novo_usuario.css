@@ -1,0 +1,127 @@
+
+/* =====================================
+   CADASTRO DE NOVO USUARIO
+===================================== */
+
+.new-user-container {
+    max-width: 650px;
+    margin-top: 30px;
+    padding: 30px;
+    background-color: #1f2937;
+    border-radius: 10px;
+}
+
+.new-user-container h3 {
+    font-size: 19px;
+    margin-bottom: 25px;
+}
+
+
+/* CAMPOS DO FORMULARIO */
+
+.new-user-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.new-user-form label {
+    font-size: 14px;
+    color: #d1d5db;
+    margin-top: 8px;
+}
+
+.new-user-form input,
+.new-user-form select {
+    width: 100%;
+    padding: 13px;
+    background-color: #111827;
+    border: 1px solid #374151;
+    border-radius: 7px;
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.new-user-form input:focus,
+.new-user-form select:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+
+.new-user-form input::placeholder {
+    color: #6b7280;
+}
+
+.new-user-form select {
+    cursor: pointer;
+}
+
+.new-user-form select option {
+    background-color: #1f2937;
+    color: #ffffff;
+}
+
+
+/* BOTOES */
+
+.new-user-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.new-user-actions button {
+    font-family: inherit;
+}
+
+.btn-secondary {
+    display: inline-block;
+    padding: 12px 18px;
+    background-color: #374151;
+    color: #ffffff;
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.btn-secondary:hover {
+    background-color: #4b5563;
+}
+
+
+/* MENSAGEM DE ERRO */
+
+.new-user-error {
+    padding: 12px;
+    margin-bottom: 20px;
+    background-color: #451a1a;
+    border: 1px solid #7f1d1d;
+    border-radius: 7px;
+    color: #fca5a5;
+    font-size: 14px;
+}
+
+
+/* RESPONSIVIDADE */
+
+@media (max-width: 600px) {
+
+    .new-user-container {
+        padding: 20px;
+        margin-top: 20px;
+    }
+
+    .new-user-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .new-user-actions button,
+    .new-user-actions a {
+        width: 100%;
+        text-align: center;
+    }
+
+}
