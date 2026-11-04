@@ -1,78 +1,27 @@
 
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wickedbotz - Painel Administrativo</title>
+{% extends "base.html" %}
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
-</head>
+{% block title %}Wickedbotz - Painel Administrativo{% endblock %}
 
-<body>
+{% block content %}
 
-    <div class="dashboard-container">
-
-        <aside class="sidebar">
-
-            <div class="sidebar-header">
-                <h1>Wickedbotz</h1>
-                <p>Painel Administrativo</p>
-            </div>
-
-            <nav class="sidebar-menu">
-
-                <a href="{{ url_for('painel') }}" class="menu-item active">
-                    Início
-                </a>
-
-                <a href="{{ url_for('usuarios') }}" class="menu-item">
-                    Usuários
-                </a>
-
-                <a href="{{ url_for('registros_acesso') }}" class="menu-item">
-                    Registros de acesso
-                </a>
-
-                <a href="#" class="menu-item">
-                    Administradores
-                </a>
-
-            </nav>
-
-            <div class="sidebar-footer">
-                <span>Olá, {{ session['admin_nome'] }}</span>
-                <a href="{{ url_for('logout') }}">Sair</a>
-            </div>
-
-        </aside>
-
-
-        <main class="main-content">
-
-            <header class="content-header">
-                <div>
-                    <h2>Visão geral</h2>
-                    <p>Bem-vindo ao sistema de controle de acesso.</p>
-                </div>
-            </header>
-
-            <section class="welcome-section">
-
-                <h3>Bem-vindo ao Wickedbotz!</h3>
-
-                <p>
-                    Utilize o menu lateral para acessar as funcionalidades
-                    de gerenciamento de usuários, registros de acesso
-                    e administração do sistema.
-                </p>
-
-            </section>
-
-        </main>
-
+<header class="content-header">
+    <div>
+        <h2>Visão geral</h2>
+        <p>Bem-vindo ao sistema de controle de acesso.</p>
     </div>
+</header>
 
-</body>
-</html>
+<section class="welcome-section">
+
+    <h3>Bem-vindo ao Wickedbotz!</h3>
+
+    <p>
+        Utilize o menu lateral para acessar as funcionalidades
+        de gerenciamento de usuários, registros de acesso
+        e administração do sistema.
+    </p>
+
+</section>
+
+{% endblock %}

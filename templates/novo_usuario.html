@@ -1,147 +1,83 @@
 
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>Wickedbotz - Novo Usuário</title>
+{% block title %}Wickedbotz - Novo Usuário{% endblock %}
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/novo_usuario.css') }}">
-</head>
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/novo_usuario.css') }}">
+{% endblock %}
 
-<body>
+{% block content %}
 
-    <div class="dashboard-container">
+<header class="content-header">
+    <h2>Novo usuário</h2>
+    <p>Preencha os dados para cadastrar um novo usuário.</p>
+</header>
 
-        <!-- MENU LATERAL -->
-        <aside class="sidebar">
+<section class="new-user-container">
 
-            <div class="sidebar-header">
-                <h1>Wickedbotz</h1>
-                <p>Painel Administrativo</p>
-            </div>
+    <h3>Dados do usuário</h3>
 
-            <nav class="sidebar-menu">
+    {% if erro %}
+        <div class="new-user-error">
+            {{ erro }}
+        </div>
+    {% endif %}
 
-                <a href="{{ url_for('painel') }}" class="menu-item">
-                    Início
-                </a>
+    <form
+        method="POST"
+        action="{{ url_for('novo_usuario') }}"
+        class="new-user-form"
+    >
 
-                <a href="{{ url_for('usuarios') }}" class="menu-item active">
-                    Usuários
-                </a>
+        <label for="nome">Nome completo</label>
 
-                <a href="#" class="menu-item">
-                    Registros de acesso
-                </a>
+        <input
+            type="text"
+            id="nome"
+            name="nome"
+            placeholder="Digite o nome completo"
+            value="{{ nome or '' }}"
+            maxlength="100"
+            required
+        >
 
-                <a href="#" class="menu-item">
-                    Administradores
-                </a>
+        <label for="categoria">Categoria</label>
 
-            </nav>
+        <select id="categoria" name="categoria" required>
 
-            <div class="sidebar-footer">
-                <span>Olá, {{ session['admin_nome'] }}</span>
-                <a href="{{ url_for('logout') }}">Sair</a>
-            </div>
-
-        </aside>
-
-
-        <!-- CONTEUDO PRINCIPAL -->
-        <main class="main-content">
-
-            <header class="content-header">
-                <h2>Novo usuário</h2>
-                <p>Preencha os dados para cadastrar um novo usuário.</p>
-            </header>
-
-
-            <section class="new-user-container">
-
-                <h3>Dados do usuário</h3>
-
-                {% if erro %}
-                    <div class="new-user-error">
-                        {{ erro }}
-                    </div>
+            <option value="membro"
+                {% if categoria == 'membro' or not categoria %}
+                    selected
                 {% endif %}
+            >
+                Membro
+            </option>
 
-                <form
-                    method="POST"
-                    action="{{ url_for('novo_usuario') }}"
-                    class="new-user-form"
-                >
+            <option value="administrador"
+                {% if categoria == 'administrador' %}
+                    selected
+                {% endif %}
+            >
+                Administrador
+            </option>
 
-                    <!-- NOME -->
-                    <label for="nome">Nome completo</label>
+        </select>
 
-                    <input
-                        type="text"
-                        id="nome"
-                        name="nome"
-                        placeholder="Digite o nome completo"
-                        value="{{ nome or '' }}"
-                        maxlength="100"
-                        required
-                    >
+        <div class="new-user-actions">
 
+            <button type="submit" class="btn-primary">
+                Cadastrar usuário
+            </button>
 
-                    <!-- CATEGORIA -->
-                    <label for="categoria">Categoria</label>
+            <a href="{{ url_for('usuarios') }}" class="btn-secondary">
+                Cancelar
+            </a>
 
-                    <select
-                        id="categoria"
-                        name="categoria"
-                        required
-                    >
+        </div>
 
-                        <option value="membro"
-                            {% if categoria == 'membro' or not categoria %}
-                                selected
-                            {% endif %}
-                        >
-                            Membro
-                        </option>
+    </form>
 
-                        <option value="administrador"
-                            {% if categoria == 'administrador' %}
-                                selected
-                            {% endif %}
-                        >
-                            Administrador
-                        </option>
+</section>
 
-                    </select>
-
-
-                    <!-- BOTOES -->
-                    <div class="new-user-actions">
-
-                        <button type="submit" class="btn-primary">
-                            Cadastrar usuário
-                        </button>
-
-                        <a
-                            href="{{ url_for('usuarios') }}"
-                            class="btn-secondary"
-                        >
-                            Cancelar
-                        </a>
-
-                    </div>
-
-                </form>
-
-            </section>
-
-        </main>
-
-    </div>
-
-</body>
-</html>
+{% endblock %}

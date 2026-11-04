@@ -1,160 +1,98 @@
 
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+{% extends "base.html" %}
 
-    <title>Wickedbotz - Editar Usuário</title>
+{% block title %}Wickedbotz - Editar Usuário{% endblock %}
 
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/editar_usuario.css') }}">
-</head>
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/editar_usuario.css') }}">
+{% endblock %}
 
-<body>
+{% block content %}
 
-    <div class="dashboard-container">
+<header class="content-header">
+    <h2>Editar usuário</h2>
+    <p>Altere os dados e as permissões do usuário.</p>
+</header>
 
-        <!-- MENU LATERAL -->
-        <aside class="sidebar">
+<section class="edit-user-container">
 
-            <div class="sidebar-header">
-                <h1>Wickedbotz</h1>
-                <p>Painel Administrativo</p>
-            </div>
+    <h3>Dados do usuário</h3>
 
-            <nav class="sidebar-menu">
+    {% if erro %}
+        <div class="edit-user-error">
+            {{ erro }}
+        </div>
+    {% endif %}
 
-                <a href="{{ url_for('painel') }}" class="menu-item">
-                    Início
-                </a>
+    <form
+        method="POST"
+        action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+        class="edit-user-form"
+    >
 
-                <a href="{{ url_for('usuarios') }}" class="menu-item active">
-                    Usuários
-                </a>
+        <label for="id">ID do usuário</label>
 
-                <a href="#" class="menu-item">
-                    Registros de acesso
-                </a>
+        <input
+            type="text"
+            id="id"
+            value="{{ usuario.id }}"
+            disabled
+        >
 
-                <a href="#" class="menu-item">
-                    Administradores
-                </a>
+        <label for="id_idface">ID iDFace</label>
 
-            </nav>
+        <input
+            type="text"
+            id="id_idface"
+            value="{{ usuario.id_idface }}"
+            disabled
+        >
 
-            <div class="sidebar-footer">
-                <span>Olá, {{ session['admin_nome'] }}</span>
-                <a href="{{ url_for('logout') }}">Sair</a>
-            </div>
+        <label for="nome">Nome completo</label>
 
-        </aside>
+        <input
+            type="text"
+            id="nome"
+            name="nome"
+            value="{{ usuario.nome }}"
+            maxlength="100"
+            required
+        >
 
-        <!-- CONTEÚDO PRINCIPAL -->
-        <main class="main-content">
+        <label for="categoria">Categoria</label>
 
-            <header class="content-header">
-                <h2>Editar usuário</h2>
-                <p>Altere os dados e as permissões do usuário.</p>
-            </header>
+        <select id="categoria" name="categoria" required>
 
-            <section class="edit-user-container">
+            <option
+                value="membro"
+                {% if usuario.categoria == 'membro' %}selected{% endif %}
+            >
+                Membro
+            </option>
 
-                <h3>Dados do usuário</h3>
+            <option
+                value="administrador"
+                {% if usuario.categoria == 'administrador' %}selected{% endif %}
+            >
+                Administrador
+            </option>
 
-                {% if erro %}
-                    <div class="edit-user-error">
-                        {{ erro }}
-                    </div>
-                {% endif %}
+        </select>
 
-                <form
-                    method="POST"
-                    action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
-                    class="edit-user-form"
-                >
+        <div class="edit-user-actions">
 
-                    <!-- ID INTERNO -->
-                    <label for="id">ID do usuário</label>
+            <button type="submit" class="btn-primary">
+                Salvar alterações
+            </button>
 
-                    <input
-                        type="text"
-                        id="id"
-                        value="{{ usuario.id }}"
-                        disabled
-                    >
+            <a href="{{ url_for('usuarios') }}" class="btn-secondary">
+                Cancelar
+            </a>
 
-                    <!-- ID IDFACE -->
-                    <label for="id_idface">ID iDFace</label>
+        </div>
 
-                    <input
-                        type="text"
-                        id="id_idface"
-                        value="{{ usuario.id_idface }}"
-                        disabled
-                    >
+    </form>
 
-                    <!-- NOME -->
-                    <label for="nome">Nome completo</label>
+</section>
 
-                    <input
-                        type="text"
-                        id="nome"
-                        name="nome"
-                        value="{{ usuario.nome }}"
-                        maxlength="100"
-                        required
-                    >
-
-                    <!-- CATEGORIA -->
-                    <label for="categoria">Categoria</label>
-
-                    <select
-                        id="categoria"
-                        name="categoria"
-                        required
-                    >
-
-                        <option
-                            value="membro"
-                            {% if usuario.categoria == 'membro' %}selected{% endif %}
-                        >
-                            Membro
-                        </option>
-
-                        <option
-                            value="administrador"
-                            {% if usuario.categoria == 'administrador' %}selected{% endif %}
-                        >
-                            Administrador
-                        </option>
-
-                    </select>
-
-                    <!-- BOTÕES -->
-                    <div class="edit-user-actions">
-
-                        <button type="submit" class="btn-primary">
-                            Salvar alterações
-                        </button>
-
-                        <a
-                            href="{{ url_for('usuarios') }}"
-                            class="btn-secondary"
-                        >
-                            Cancelar
-                        </a>
-
-                    </div>
-
-                </form>
-
-            </section>
-
-        </main>
-
-    </div>
-
-</body>
-</html>
+{% endblock %}

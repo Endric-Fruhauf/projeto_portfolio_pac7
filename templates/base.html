@@ -1,0 +1,82 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>{% block title %}Wickedbotz - Painel Administrativo{% endblock %}</title>
+
+    <!-- CSS global -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
+
+    <!-- CSS específico de cada página -->
+    {% block extra_css %}{% endblock %}
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <!-- Menu lateral -->
+        <aside class="sidebar">
+
+            <div class="sidebar-header">
+                <h1>Wickedbotz</h1>
+                <p>Painel Administrativo</p>
+            </div>
+
+            <nav class="sidebar-menu">
+
+                <a
+                    href="{{ url_for('painel') }}"
+                    class="menu-item {% if request.endpoint == 'painel' %}active{% endif %}"
+                >
+                    Início
+                </a>
+
+                <a
+                    href="{{ url_for('usuarios') }}"
+                    class="menu-item {% if request.endpoint in ['usuarios', 'novo_usuario', 'editar_usuario'] %}active{% endif %}"
+                >
+                    Usuários
+                </a>
+
+                <a
+                    href="{{ url_for('registros_acesso') }}"
+                    class="menu-item {% if request.endpoint == 'registros_acesso' %}active{% endif %}"
+                >
+                    Registros de acesso
+                </a>
+
+                <a
+                    href="{{ url_for('administradores') }}"
+                    class="menu-item {% if request.endpoint in ['administradores', 'novo_administrador', 'editar_administrador'] %}active{% endif %}"
+                >
+                    Administradores
+                </a>
+
+            </nav>
+
+            <div class="sidebar-footer">
+                <span>Olá, {{ session['admin_nome'] }}</span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+
+        </aside>
+
+        <!-- Conteúdo da página -->
+        <main class="main-content {% block main_class %}{% endblock %}">
+
+            {% block content %}{% endblock %}
+
+        </main>
+
+    </div>
+
+    <!-- JavaScript específico de cada página -->
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>
