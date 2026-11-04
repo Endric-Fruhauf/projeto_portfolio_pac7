@@ -1,10 +1,160 @@
+
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Wickedbotz - Editar Usuário</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/editar_usuario.css') }}">
 </head>
+
 <body>
+
+    <div class="dashboard-container">
+
+        <!-- MENU LATERAL -->
+        <aside class="sidebar">
+
+            <div class="sidebar-header">
+                <h1>Wickedbotz</h1>
+                <p>Painel Administrativo</p>
+            </div>
+
+            <nav class="sidebar-menu">
+
+                <a href="{{ url_for('painel') }}" class="menu-item">
+                    Início
+                </a>
+
+                <a href="{{ url_for('usuarios') }}" class="menu-item active">
+                    Usuários
+                </a>
+
+                <a href="#" class="menu-item">
+                    Registros de acesso
+                </a>
+
+                <a href="#" class="menu-item">
+                    Administradores
+                </a>
+
+            </nav>
+
+            <div class="sidebar-footer">
+                <span>Olá, {{ session['admin_nome'] }}</span>
+                <a href="{{ url_for('logout') }}">Sair</a>
+            </div>
+
+        </aside>
+
+        <!-- CONTEÚDO PRINCIPAL -->
+        <main class="main-content">
+
+            <header class="content-header">
+                <h2>Editar usuário</h2>
+                <p>Altere os dados e as permissões do usuário.</p>
+            </header>
+
+            <section class="edit-user-container">
+
+                <h3>Dados do usuário</h3>
+
+                {% if erro %}
+                    <div class="edit-user-error">
+                        {{ erro }}
+                    </div>
+                {% endif %}
+
+                <form
+                    method="POST"
+                    action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+                    class="edit-user-form"
+                >
+
+                    <!-- ID INTERNO -->
+                    <label for="id">ID do usuário</label>
+
+                    <input
+                        type="text"
+                        id="id"
+                        value="{{ usuario.id }}"
+                        disabled
+                    >
+
+                    <!-- ID IDFACE -->
+                    <label for="id_idface">ID iDFace</label>
+
+                    <input
+                        type="text"
+                        id="id_idface"
+                        value="{{ usuario.id_idface }}"
+                        disabled
+                    >
+
+                    <!-- NOME -->
+                    <label for="nome">Nome completo</label>
+
+                    <input
+                        type="text"
+                        id="nome"
+                        name="nome"
+                        value="{{ usuario.nome }}"
+                        maxlength="100"
+                        required
+                    >
+
+                    <!-- CATEGORIA -->
+                    <label for="categoria">Categoria</label>
+
+                    <select
+                        id="categoria"
+                        name="categoria"
+                        required
+                    >
+
+                        <option
+                            value="membro"
+                            {% if usuario.categoria == 'membro' %}selected{% endif %}
+                        >
+                            Membro
+                        </option>
+
+                        <option
+                            value="administrador"
+                            {% if usuario.categoria == 'administrador' %}selected{% endif %}
+                        >
+                            Administrador
+                        </option>
+
+                    </select>
+
+                    <!-- BOTÕES -->
+                    <div class="edit-user-actions">
+
+                        <button type="submit" class="btn-primary">
+                            Salvar alterações
+                        </button>
+
+                        <a
+                            href="{{ url_for('usuarios') }}"
+                            class="btn-secondary"
+                        >
+                            Cancelar
+                        </a>
+
+                    </div>
+
+                </form>
+
+            </section>
+
+        </main>
+
+    </div>
 
 </body>
 </html>

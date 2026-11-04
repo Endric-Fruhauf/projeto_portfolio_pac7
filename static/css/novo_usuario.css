@@ -40,6 +40,7 @@
     border-radius: 7px;
     color: #ffffff;
     font-size: 14px;
+    box-sizing: border-box;
 }
 
 .new-user-form input:focus,
@@ -73,9 +74,28 @@
 
 .new-user-actions button {
     font-family: inherit;
+    cursor: pointer;
 }
 
-.btn-secondary {
+/* BOTAO CADASTRAR */
+
+.new-user-actions .btn-primary {
+    padding: 12px 18px;
+    background-color: #2563eb;
+    color: #ffffff;
+    border: none;
+    border-radius: 7px;
+    font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.new-user-actions .btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+/* BOTAO CANCELAR */
+
+.new-user-actions .btn-secondary {
     display: inline-block;
     padding: 12px 18px;
     background-color: #374151;
@@ -86,7 +106,7 @@
     transition: background-color 0.2s;
 }
 
-.btn-secondary:hover {
+.new-user-actions .btn-secondary:hover {
     background-color: #4b5563;
 }
 
@@ -122,6 +142,7 @@
     .new-user-actions a {
         width: 100%;
         text-align: center;
+        box-sizing: border-box;
     }
 
 }
