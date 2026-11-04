@@ -1,17 +1,18 @@
 
-import requests
 import mysql.connector
 import config
 
+from idface import IDFaceError
 
-def sincronizar_usuarios():
-    sessao = None
+
+def sincronizar_usuarios(idface):
     conexao = None
     cursor = None
 
     resultado_sync = {
         "novos": 0,
         "atualizados": 0,
+        "inativados": 0,
         "ignorados": 0,
         "sucesso": False
     }
@@ -20,96 +21,53 @@ def sincronizar_usuarios():
         print("=== SINCRONIZACAO DE USUARIOS ===\n")
 
         # =====================================
-        # 1. AUTENTICAR NO IDFACE
+        # 1. CONSULTAR USUARIOS NO IDFACE
         # =====================================
 
-        resposta = requests.post(
-            f"http://{config.IDFACE_IP}/login.fcgi",
-            json={
-                "login": config.IDFACE_USUARIO,
-                "password": config.IDFACE_SENHA
-            },
-            timeout=10
-        )
+        usuarios = idface.consultar_usuarios()
 
-        resposta.raise_for_status()
-        dados_login = resposta.json()
-
-        if "error" in dados_login:
-            raise Exception(
-                f"Erro de autenticacao: {dados_login['error']}"
+        if not isinstance(usuarios, list):
+            raise ValueError(
+                "Resposta invalida ao consultar usuarios no iDFace."
             )
 
-        sessao = dados_login.get("session")
-
-        if not sessao:
-            raise Exception(
-                "O iDFace nao retornou uma sessao valida."
-            )
-
-        print("Autenticacao no iDFace realizada!")
+        print(f"Usuarios encontrados no iDFace: {len(usuarios)}")
 
         # =====================================
-        # 2. CONSULTAR USUARIOS
+        # 2. CONSULTAR PRIVILEGIOS
         # =====================================
 
-        resposta = requests.post(
-            f"http://{config.IDFACE_IP}/load_objects.fcgi",
-            params={"session": sessao},
-            json={"object": "users"},
-            timeout=10
+        dados_privilegios = idface.requisicao(
+            "load_objects.fcgi",
+            {"object": "user_roles"}
         )
 
-        resposta.raise_for_status()
-        dados_usuarios = resposta.json()
-
-        if "error" in dados_usuarios:
-            raise Exception(
-                f"Erro ao consultar usuarios: {dados_usuarios['error']}"
-            )
-
-        usuarios = dados_usuarios.get("users", [])
-
-        print(
-            f"Usuarios encontrados no iDFace: {len(usuarios)}"
-        )
-
-        # =====================================
-        # 3. CONSULTAR PRIVILEGIOS
-        # =====================================
-
-        resposta = requests.post(
-            f"http://{config.IDFACE_IP}/load_objects.fcgi",
-            params={"session": sessao},
-            json={"object": "user_roles"},
-            timeout=10
-        )
-
-        resposta.raise_for_status()
-        dados_privilegios = resposta.json()
-
-        if "error" in dados_privilegios:
-            raise Exception(
-                "Erro ao consultar privilegios: "
-                f"{dados_privilegios['error']}"
+        if not isinstance(dados_privilegios, dict):
+            raise ValueError(
+                "Resposta invalida ao consultar privilegios do iDFace."
             )
 
         privilegios = dados_privilegios.get("user_roles", [])
 
-        # Guarda os IDs dos usuarios administradores.
+        if not isinstance(privilegios, list):
+            raise ValueError(
+                "Lista de privilegios do iDFace invalida."
+            )
+
         administradores_idface = {
-            privilegio["user_id"]
+            int(privilegio["user_id"])
             for privilegio in privilegios
             if privilegio.get("role") == 1
+            and privilegio.get("user_id") is not None
         }
 
         print(
-            f"Usuarios com privilegio administrativo: "
+            "Usuarios com privilegio administrativo: "
             f"{len(administradores_idface)}"
         )
 
         # =====================================
-        # 4. CONECTAR AO MYSQL
+        # 3. CONECTAR AO MYSQL
         # =====================================
 
         conexao = mysql.connector.connect(
@@ -125,7 +83,19 @@ def sincronizar_usuarios():
         print("\nConexao com MySQL realizada!")
 
         # =====================================
-        # 5. SINCRONIZAR USUARIOS
+        # 4. IDENTIFICAR USUARIOS PRESENTES
+        # =====================================
+
+        ids_presentes = set()
+
+        for usuario in usuarios:
+            id_idface = usuario.get("id")
+
+            if id_idface is not None:
+                ids_presentes.add(int(id_idface))
+
+        # =====================================
+        # 5. SINCRONIZAR USUARIOS DO IDFACE
         # =====================================
 
         for usuario in usuarios:
@@ -135,22 +105,21 @@ def sincronizar_usuarios():
 
             if id_idface is None or not nome:
                 resultado_sync["ignorados"] += 1
-                print(
-                    "Usuario ignorado: ID ou nome ausente."
-                )
+
+                print("Usuario ignorado: ID ou nome ausente.")
                 continue
 
-            # Determinar categoria pelo user_roles.
+            id_idface = int(id_idface)
+
             categoria = (
                 "administrador"
                 if id_idface in administradores_idface
                 else "membro"
             )
 
-            # Procurar pelo identificador do equipamento.
             cursor.execute(
                 """
-                SELECT id
+                SELECT id, ativo
                 FROM usuarios
                 WHERE id_idface = %s
                 """,
@@ -161,7 +130,20 @@ def sincronizar_usuarios():
 
             if existente:
 
-                # Atualizar usuario existente.
+                id_mysql, ativo = existente
+
+                # Cadastro historico nunca e reativado.
+                if not ativo:
+                    resultado_sync["ignorados"] += 1
+
+                    print(
+                        f"Cadastro historico ignorado: {nome} | "
+                        f"ID MySQL: {id_mysql} | "
+                        f"ID iDFace: {id_idface}"
+                    )
+
+                    continue
+
                 cursor.execute(
                     """
                     UPDATE usuarios
@@ -172,7 +154,7 @@ def sincronizar_usuarios():
                     (
                         nome,
                         categoria,
-                        existente[0]
+                        id_mysql
                     )
                 )
 
@@ -180,14 +162,13 @@ def sincronizar_usuarios():
 
                 print(
                     f"Atualizado: {nome} | "
-                    f"ID MySQL: {existente[0]} | "
+                    f"ID MySQL: {id_mysql} | "
                     f"ID iDFace: {id_idface} | "
                     f"Categoria: {categoria}"
                 )
 
             else:
 
-                # Inserir usuario novo.
                 cursor.execute(
                     """
                     INSERT INTO usuarios
@@ -213,7 +194,45 @@ def sincronizar_usuarios():
                 )
 
         # =====================================
-        # 6. CONFIRMAR ALTERACOES
+        # 6. IDENTIFICAR USUARIOS EXCLUIDOS
+        # =====================================
+
+        cursor.execute(
+            """
+            SELECT id, id_idface, nome
+            FROM usuarios
+            WHERE ativo = 1
+              AND categoria = 'membro'
+              AND id_idface IS NOT NULL
+            """
+        )
+
+        usuarios_ativos = cursor.fetchall()
+
+        for id_mysql, id_idface, nome in usuarios_ativos:
+
+            if id_idface not in ids_presentes:
+
+                cursor.execute(
+                    """
+                    UPDATE usuarios
+                    SET ativo = 0
+                    WHERE id = %s
+                    """,
+                    (id_mysql,)
+                )
+
+                resultado_sync["inativados"] += 1
+
+                print(
+                    f"Usuario excluido do iDFace: {nome} | "
+                    f"ID MySQL: {id_mysql} | "
+                    f"ID iDFace: {id_idface} | "
+                    "Cadastro preservado como historico."
+                )
+
+        # =====================================
+        # 7. CONFIRMAR ALTERACOES
         # =====================================
 
         conexao.commit()
@@ -221,21 +240,16 @@ def sincronizar_usuarios():
         resultado_sync["sucesso"] = True
 
         print("\n=== RESULTADO ===")
-        print(
-            "Novos usuarios:",
-            resultado_sync["novos"]
-        )
-        print(
-            "Usuarios atualizados:",
-            resultado_sync["atualizados"]
-        )
-        print(
-            "Usuarios ignorados:",
-            resultado_sync["ignorados"]
-        )
-        print("Sincronizacao concluida!")
+        print("Novos usuarios:", resultado_sync["novos"])
+        print("Usuarios atualizados:", resultado_sync["atualizados"])
+        print("Usuarios inativados:", resultado_sync["inativados"])
+        print("Usuarios ignorados:", resultado_sync["ignorados"])
+        print("Sincronizacao de usuarios concluida!")
 
-    except requests.exceptions.RequestException as erro:
+    except IDFaceError as erro:
+
+        if conexao and conexao.is_connected():
+            conexao.rollback()
 
         print("\nErro na comunicacao com iDFace:")
         print(erro)
@@ -258,23 +272,8 @@ def sincronizar_usuarios():
 
     finally:
 
-        # =====================================
-        # 7. ENCERRAR SESSAO DO IDFACE
-        # =====================================
-
-        if sessao:
-            try:
-                requests.post(
-                    f"http://{config.IDFACE_IP}/logout.fcgi",
-                    params={"session": sessao},
-                    timeout=5
-                )
-            except requests.exceptions.RequestException:
-                pass
-
-        # =====================================
-        # 8. ENCERRAR CONEXAO MYSQL
-        # =====================================
+        # A sessao do iDFace pertence ao servidor.py.
+        # Portanto, nao encerramos a sessao aqui.
 
         if cursor:
             cursor.close()
@@ -286,4 +285,11 @@ def sincronizar_usuarios():
 
 
 if __name__ == "__main__":
-    sincronizar_usuarios()
+    from idface import IDFaceClient
+
+    try:
+        with IDFaceClient() as cliente:
+            sincronizar_usuarios(cliente)
+
+    except Exception as erro:
+        print("Erro ao executar sincronizacao:", erro)

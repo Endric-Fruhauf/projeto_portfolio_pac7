@@ -1,14 +1,14 @@
 
-import requests
 import mysql.connector
 import config
+
 from datetime import datetime
+from idface import IDFaceError
 
 
-def sincronizar_logs():
+def sincronizar_logs(idface):
     conexao = None
     cursor = None
-    sessao = None
 
     resultado_sync = {
         "novos": 0,
@@ -20,25 +20,10 @@ def sincronizar_logs():
     try:
         print("=== SINCRONIZACAO DE REGISTROS DE ACESSO ===\n")
 
-        # 1. Autenticar no iDFace
-        resposta = requests.post(
-            f"http://{config.IDFACE_IP}/login.fcgi",
-            json={
-                "login": config.IDFACE_USUARIO,
-                "password": config.IDFACE_SENHA
-            },
-            timeout=10
-        )
+        # =====================================
+        # 1. CONECTAR AO MYSQL
+        # =====================================
 
-        resposta.raise_for_status()
-        sessao = resposta.json().get("session")
-
-        if not sessao:
-            raise Exception("Erro na autenticacao do iDFace.")
-
-        print("Autenticacao realizada com sucesso!")
-
-        # 2. Conectar ao MySQL
         conexao = mysql.connector.connect(
             host=config.MYSQL_HOST,
             port=config.MYSQL_PORT,
@@ -51,7 +36,10 @@ def sincronizar_logs():
 
         print("Conexao com MySQL realizada!\n")
 
-        # 3. Descobrir o ultimo registro sincronizado
+        # =====================================
+        # 2. DESCOBRIR ULTIMO REGISTRO
+        # =====================================
+
         cursor.execute(
             """
             SELECT COALESCE(MAX(id_idface), 0)
@@ -63,14 +51,17 @@ def sincronizar_logs():
 
         print(f"Ultimo registro sincronizado: {ultimo_id}")
 
-        # 4. Buscar registros novos em lotes de 50
+        # =====================================
+        # 3. BUSCAR REGISTROS EM LOTES DE 50
+        # =====================================
+
         continuar = True
 
         while continuar:
 
-            resposta = requests.post(
-                f"http://{config.IDFACE_IP}/load_objects.fcgi?session={sessao}",
-                json={
+            resposta = idface.requisicao(
+                "load_objects.fcgi",
+                {
                     "object": "access_logs",
                     "fields": [
                         "id",
@@ -91,22 +82,25 @@ def sincronizar_logs():
                     ],
                     "limit": 50,
                     "order": ["ascending", "id"]
-                },
-                timeout=10
+                }
             )
 
-            resposta.raise_for_status()
+            registros = resposta.get("access_logs", [])
 
-            registros = resposta.json().get("access_logs", [])
-
-            print(f"\nRegistros encontrados neste lote: {len(registros)}")
+            print(
+                f"\nRegistros encontrados neste lote: "
+                f"{len(registros)}"
+            )
 
             if not registros:
                 break
 
             maior_id_lote = ultimo_id
 
-            # 5. Processar registros recebidos
+            # =====================================
+            # 4. PROCESSAR REGISTROS
+            # =====================================
+
             for registro in registros:
 
                 id_registro = registro.get("id")
@@ -119,7 +113,10 @@ def sincronizar_logs():
                     resultado_sync["ignorados"] += 1
                     continue
 
-                maior_id_lote = max(maior_id_lote, int(id_registro))
+                maior_id_lote = max(
+                    maior_id_lote,
+                    int(id_registro)
+                )
 
                 if (
                     horario is None
@@ -129,16 +126,20 @@ def sincronizar_logs():
                     resultado_sync["ignorados"] += 1
                     continue
 
-                # Converter horario do equipamento
+                # Converter horario do equipamento.
                 data_hora = datetime.fromtimestamp(int(horario))
 
-                # 6. Localizar usuario no MySQL
+                # =====================================
+                # 5. LOCALIZAR USUARIO NO MYSQL
+                # =====================================
+
                 id_usuario = None
 
                 if usuario_idface:
                     cursor.execute(
                         """
-                        SELECT id FROM usuarios
+                        SELECT id
+                        FROM usuarios
                         WHERE id_idface = %s
                         """,
                         (usuario_idface,)
@@ -149,11 +150,20 @@ def sincronizar_logs():
                     if usuario:
                         id_usuario = usuario[0]
 
-                # 7. Inserir registro no MySQL
+                # =====================================
+                # 6. INSERIR OU ATUALIZAR REGISTRO
+                # =====================================
+
                 cursor.execute(
                     """
                     INSERT INTO registros_acesso
-                    (id_idface, id_usuario, data_hora, evento, dispositivo_id)
+                    (
+                        id_idface,
+                        id_usuario,
+                        data_hora,
+                        evento,
+                        dispositivo_id
+                    )
                     VALUES (%s, %s, %s, %s, %s)
 
                     ON DUPLICATE KEY UPDATE
@@ -173,6 +183,7 @@ def sincronizar_logs():
 
                 if cursor.rowcount == 1:
                     resultado_sync["novos"] += 1
+
                 elif cursor.rowcount == 2:
                     resultado_sync["atualizados"] += 1
 
@@ -182,12 +193,18 @@ def sincronizar_logs():
                     f"Data: {data_hora.strftime('%d/%m/%Y %H:%M:%S')}"
                 )
 
-            # Avancar para o proximo lote
+            # =====================================
+            # 7. AVANCAR PARA O PROXIMO LOTE
+            # =====================================
+
             ultimo_id = maior_id_lote
 
-            # Se vieram menos de 50, nao existem mais lotes
             if len(registros) < 50:
                 continuar = False
+
+        # =====================================
+        # 8. CONFIRMAR ALTERACOES
+        # =====================================
 
         conexao.commit()
 
@@ -197,9 +214,10 @@ def sincronizar_logs():
         print("Novos registros:", resultado_sync["novos"])
         print("Registros atualizados:", resultado_sync["atualizados"])
         print("Registros ignorados:", resultado_sync["ignorados"])
-        print("\nSincronizacao concluida!")
+        print("\nSincronizacao de registros concluida!")
 
-    except requests.exceptions.RequestException as erro:
+    except IDFaceError as erro:
+
         if conexao and conexao.is_connected():
             conexao.rollback()
 
@@ -207,6 +225,7 @@ def sincronizar_logs():
         print(erro)
 
     except mysql.connector.Error as erro:
+
         if conexao and conexao.is_connected():
             conexao.rollback()
 
@@ -214,6 +233,7 @@ def sincronizar_logs():
         print(erro)
 
     except Exception as erro:
+
         if conexao and conexao.is_connected():
             conexao.rollback()
 
@@ -221,17 +241,10 @@ def sincronizar_logs():
         print(erro)
 
     finally:
-        # 8. Encerrar sessao do iDFace
-        if sessao:
-            try:
-                requests.post(
-                    f"http://{config.IDFACE_IP}/logout.fcgi?session={sessao}",
-                    timeout=5
-                )
-            except requests.exceptions.RequestException:
-                pass
 
-        # 9. Encerrar conexao com MySQL
+        # A sessao do iDFace pertence ao servidor.py.
+        # Portanto, nao encerramos a sessao aqui.
+
         if cursor:
             cursor.close()
 
@@ -242,4 +255,11 @@ def sincronizar_logs():
 
 
 if __name__ == "__main__":
-    sincronizar_logs()
+    from idface import IDFaceClient
+
+    try:
+        with IDFaceClient() as cliente:
+            sincronizar_logs(cliente)
+
+    except Exception as erro:
+        print("Erro ao executar sincronizacao:", erro)

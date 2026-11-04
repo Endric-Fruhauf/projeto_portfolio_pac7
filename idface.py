@@ -1,4 +1,5 @@
 
+import os
 import requests
 import config
 
@@ -9,10 +10,25 @@ class IDFaceError(Exception):
 
 
 class IDFaceClient:
-
     def __init__(self):
-        self.base_url = f"http://{config.IDFACE_IP}"
+        self.base_url = f"https://{config.IDFACE_IP}"
+
+        # Caminho absoluto do certificado, independente
+        # do diretório em que o servidor for iniciado.
+        diretorio_projeto = os.path.dirname(os.path.abspath(__file__))
+
+        self.certificado = os.path.join(
+            diretorio_projeto,
+            "certificados",
+            "idface_certificado.pem"
+        )
+
         self.session = None
+
+        if not os.path.isfile(self.certificado):
+            raise IDFaceError(
+                f"Certificado do iDFace não encontrado: {self.certificado}"
+            )
 
     def conectar(self):
         try:
@@ -22,6 +38,7 @@ class IDFaceClient:
                     "login": config.IDFACE_USUARIO,
                     "password": config.IDFACE_SENHA
                 },
+                verify=self.certificado,
                 timeout=10
             )
 
@@ -34,9 +51,19 @@ class IDFaceClient:
                     "O iDFace não retornou uma sessão válida."
                 )
 
+        except requests.exceptions.SSLError as erro:
+            raise IDFaceError(
+                f"Falha na validação SSL do iDFace: {erro}"
+            )
+
         except requests.exceptions.RequestException as erro:
             raise IDFaceError(
                 f"Não foi possível conectar ao iDFace: {erro}"
+            )
+
+        except ValueError:
+            raise IDFaceError(
+                "O iDFace retornou uma resposta inválida durante o login."
             )
 
     def desconectar(self):
@@ -45,12 +72,15 @@ class IDFaceClient:
                 requests.post(
                     f"{self.base_url}/logout.fcgi",
                     params={"session": self.session},
+                    verify=self.certificado,
                     timeout=5
                 )
+
             except requests.exceptions.RequestException:
                 pass
 
-            self.session = None
+            finally:
+                self.session = None
 
     def requisicao(self, endpoint, dados):
         if not self.session:
@@ -61,6 +91,7 @@ class IDFaceClient:
                 f"{self.base_url}/{endpoint}",
                 params={"session": self.session},
                 json=dados,
+                verify=self.certificado,
                 timeout=10
             )
 
@@ -72,6 +103,11 @@ class IDFaceClient:
                 raise IDFaceError(str(resultado["error"]))
 
             return resultado
+
+        except requests.exceptions.SSLError as erro:
+            raise IDFaceError(
+                f"Falha na validação SSL durante {endpoint}: {erro}"
+            )
 
         except requests.exceptions.RequestException as erro:
             raise IDFaceError(
@@ -121,14 +157,8 @@ class IDFaceClient:
             "modify_objects.fcgi",
             {
                 "object": "users",
-                "values": {
-                    "name": nome
-                },
-                "where": {
-                    "users": {
-                        "id": id_idface
-                    }
-                }
+                "values": {"name": nome},
+                "where": {"users": {"id": id_idface}}
             }
         )
 
@@ -138,20 +168,16 @@ class IDFaceClient:
             )
 
     def definir_administrador(self, id_idface, administrador):
-        # Remove os privilégios administrativos anteriores.
+        # Remove os vínculos de permissões anteriores.
         self.requisicao(
             "destroy_objects.fcgi",
             {
                 "object": "user_roles",
-                "where": {
-                    "user_roles": {
-                        "user_id": id_idface
-                    }
-                }
+                "where": {"user_roles": {"user_id": id_idface}}
             }
         )
 
-        # Cria o privilégio somente para administradores.
+        # Adiciona a permissão de administrador quando necessário.
         if administrador:
             self.requisicao(
                 "create_objects.fcgi",
@@ -167,29 +193,21 @@ class IDFaceClient:
             )
 
     def excluir_usuario(self, id_idface):
-        # Remove primeiro o vínculo administrativo.
+        # Remove primeiro os vínculos de permissões.
         self.requisicao(
             "destroy_objects.fcgi",
             {
                 "object": "user_roles",
-                "where": {
-                    "user_roles": {
-                        "user_id": id_idface
-                    }
-                }
+                "where": {"user_roles": {"user_id": id_idface}}
             }
         )
 
-        # Remove o cadastro do equipamento.
+        # Exclui o usuário do equipamento.
         resultado = self.requisicao(
             "destroy_objects.fcgi",
             {
                 "object": "users",
-                "where": {
-                    "users": {
-                        "id": id_idface
-                    }
-                }
+                "where": {"users": {"id": id_idface}}
             }
         )
 

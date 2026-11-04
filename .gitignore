@@ -11,3 +11,6 @@ __pycache__/
 
 # Configurações locais do PyCharm
 .idea/
+
+# Certificados e chaves privadas do iDFace
+certificados/

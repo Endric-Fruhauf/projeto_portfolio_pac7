@@ -1,0 +1,215 @@
+
+/* =====================================
+   EDITAR ADMINISTRADOR
+===================================== */
+
+.edit-admin-page {
+    min-width: 0;
+    color: #e5e7eb;
+}
+
+.edit-admin-page,
+.edit-admin-page * {
+    box-sizing: border-box;
+}
+
+
+/* =====================================
+   CONTAINER DO FORMULÁRIO
+===================================== */
+
+.edit-admin-container {
+    width: 100%;
+    max-width: 680px;
+    margin-top: 30px;
+    padding: 28px;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 10px;
+}
+
+.edit-admin-heading {
+    margin-bottom: 25px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid #374151;
+}
+
+.edit-admin-heading h3 {
+    margin-bottom: 7px;
+    color: #f9fafb;
+    font-size: 17px;
+}
+
+.edit-admin-heading p {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+
+/* =====================================
+   FORMULÁRIO
+===================================== */
+
+.edit-admin-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.edit-admin-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.edit-admin-field label {
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.edit-admin-field input {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    padding: 0 13px;
+    background-color: #111827;
+    border: 1px solid #374151;
+    border-radius: 7px;
+    color: #f3f4f6;
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.edit-admin-field input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.edit-admin-field input::placeholder {
+    color: #6b7280;
+}
+
+.edit-admin-field input:disabled {
+    background-color: #263449;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+
+/* =====================================
+   SEPARAÇÃO DA SENHA
+===================================== */
+
+.edit-admin-password-section {
+    margin-top: 8px;
+    padding-top: 20px;
+    border-top: 1px solid #374151;
+}
+
+.edit-admin-password-section h4 {
+    margin-bottom: 6px;
+    color: #f9fafb;
+    font-size: 15px;
+}
+
+.edit-admin-password-section p {
+    color: #9ca3af;
+    font-size: 12px;
+}
+
+
+/* =====================================
+   AÇÕES
+===================================== */
+
+.edit-admin-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+}
+
+.edit-admin-btn-primary,
+.edit-admin-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 17px;
+    border: none;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.edit-admin-btn-primary {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+
+.edit-admin-btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+.edit-admin-btn-secondary {
+    background-color: #374151;
+    color: #e5e7eb;
+}
+
+.edit-admin-btn-secondary:hover {
+    background-color: #4b5563;
+}
+
+
+/* =====================================
+   MENSAGEM DE ERRO
+===================================== */
+
+.edit-admin-error {
+    margin-bottom: 20px;
+    padding: 13px 15px;
+    background-color: #451a1a;
+    border: 1px solid #7f1d1d;
+    border-radius: 7px;
+    color: #fca5a5;
+    font-size: 13px;
+}
+
+
+/* =====================================
+   RESPONSIVIDADE
+===================================== */
+
+@media (max-width: 700px) {
+
+    .edit-admin-container {
+        margin-top: 20px;
+        padding: 20px;
+    }
+
+    .edit-admin-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .edit-admin-actions button,
+    .edit-admin-actions a {
+        width: 100%;
+    }
+
+}
+
+@media (max-width: 380px) {
+
+    .edit-admin-container {
+        padding: 16px;
+    }
+
+}

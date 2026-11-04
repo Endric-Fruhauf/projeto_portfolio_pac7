@@ -1,0 +1,145 @@
+
+{% extends "base.html" %}
+
+{% block title %}Wickedbotz - Administradores{% endblock %}
+
+{% block main_class %}admins-page{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/administradores.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<header class="content-header">
+    <div>
+        <h2>Gerenciamento de administradores</h2>
+        <p>Consulte e gerencie os administradores do sistema.</p>
+    </div>
+</header>
+
+{% if erro %}
+    <div class="admin-message-error">{{ erro }}</div>
+{% endif %}
+
+<section class="admin-actions">
+    <div>
+        <h3>Administradores cadastrados</h3>
+        <p>Gerencie as contas com acesso ao painel administrativo.</p>
+    </div>
+
+    <a href="{{ url_for('novo_administrador') }}" class="admin-btn-primary">
+        + Novo administrador
+    </a>
+</section>
+
+<section class="admin-table-container">
+
+    <div class="admin-table-responsive">
+
+        <table class="admin-table">
+
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Nome</th>
+                    <th>Usuário</th>
+                    <th>Data de cadastro</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for administrador in administradores %}
+
+                    <tr>
+                        <td class="admin-id">{{ administrador.id }}</td>
+
+                        <td>{{ administrador.nome }}</td>
+
+                        <td>{{ administrador.usuario }}</td>
+
+                        <td>
+                            {% if administrador.data_cadastro %}
+                                {{ administrador.data_cadastro.strftime('%d/%m/%Y %H:%M') }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            {% if administrador.ativo %}
+                                <span class="admin-status active">Ativo</span>
+                            {% else %}
+                                <span class="admin-status inactive">Inativo</span>
+                            {% endif %}
+                        </td>
+
+                        <td>
+                            <div class="admin-row-actions">
+
+                                <a
+                                    href="{{ url_for('editar_administrador', id_administrador=administrador.id) }}"
+                                    class="admin-btn-edit"
+                                >
+                                    Editar
+                                </a>
+
+                                {% if administrador.id != session.get('admin_id') %}
+
+                                    <form
+                                        action="{{ url_for('alterar_status_administrador', id_administrador=administrador.id) }}"
+                                        method="POST"
+                                        onsubmit="return confirm('Deseja realmente {{ 'desativar' if administrador.ativo else 'ativar' }} este administrador?');"
+                                    >
+                                        <button
+                                            type="submit"
+                                            class="admin-btn-status {{ 'deactivate' if administrador.ativo else 'activate' }}"
+                                        >
+                                            {{ 'Desativar' if administrador.ativo else 'Ativar' }}
+                                        </button>
+                                    </form>
+
+                                    <form
+                                        action="{{ url_for('excluir_administrador', id_administrador=administrador.id) }}"
+                                        method="POST"
+                                        onsubmit="return confirm('Tem certeza de que deseja excluir este administrador? Esta ação não poderá ser desfeita.');"
+                                    >
+                                        <button type="submit" class="admin-btn-delete">
+                                            Excluir
+                                        </button>
+                                    </form>
+
+                                {% else %}
+
+                                    <span class="admin-current-account">
+                                        Conta atual
+                                    </span>
+
+                                {% endif %}
+
+                            </div>
+                        </td>
+                    </tr>
+
+                {% else %}
+
+                    <tr>
+                        <td colspan="6" class="admin-empty">
+                            Nenhum administrador cadastrado.
+                        </td>
+                    </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+{% endblock %}

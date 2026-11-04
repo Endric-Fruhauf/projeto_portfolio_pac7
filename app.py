@@ -2,8 +2,11 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import mysql.connector
 from werkzeug.security import check_password_hash, generate_password_hash
-from threading import Thread
+from threading import Thread, Lock
+from datetime import timedelta
 import os
+import time
+import math
 
 from idface import IDFaceClient, IDFaceError
 from servidor import iniciar_servidor
@@ -12,6 +15,94 @@ import config
 
 app = Flask(__name__)
 app.secret_key = config.FLASK_SECRET_KEY
+
+# =====================================
+# CONFIGURACOES DE SEGURANCA
+# =====================================
+
+DEBUG = os.getenv("FLASK_DEBUG", "false").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on"
+)
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=False,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8)
+)
+
+LIMITE_TENTATIVAS_LOGIN = 5
+JANELA_TENTATIVAS_SEGUNDOS = 15 * 60
+TEMPO_BLOQUEIO_SEGUNDOS = 15 * 60
+
+_tentativas_login = {}
+_lock_tentativas_login = Lock()
+
+
+def verificar_bloqueio_login(ip):
+    agora = time.monotonic()
+
+    with _lock_tentativas_login:
+        estado = _tentativas_login.get(ip)
+
+        if not estado:
+            return 0
+
+        bloqueado_ate = estado.get("bloqueado_ate", 0)
+
+        if bloqueado_ate > agora:
+            return math.ceil(bloqueado_ate - agora)
+
+        tentativas = [
+            horario
+            for horario in estado.get("tentativas", [])
+            if agora - horario < JANELA_TENTATIVAS_SEGUNDOS
+        ]
+
+        estado["tentativas"] = tentativas
+
+        if not tentativas:
+            _tentativas_login.pop(ip, None)
+
+        return 0
+
+
+def registrar_falha_login(ip):
+    agora = time.monotonic()
+
+    with _lock_tentativas_login:
+        estado = _tentativas_login.setdefault(
+            ip,
+            {
+                "tentativas": [],
+                "bloqueado_ate": 0
+            }
+        )
+
+        estado["tentativas"] = [
+            horario
+            for horario in estado["tentativas"]
+            if agora - horario < JANELA_TENTATIVAS_SEGUNDOS
+        ]
+
+        estado["tentativas"].append(agora)
+
+        if len(estado["tentativas"]) >= LIMITE_TENTATIVAS_LOGIN:
+            estado["bloqueado_ate"] = (
+                agora + TEMPO_BLOQUEIO_SEGUNDOS
+            )
+
+            return TEMPO_BLOQUEIO_SEGUNDOS
+
+        return 0
+
+
+def limpar_tentativas_login(ip):
+    with _lock_tentativas_login:
+        _tentativas_login.pop(ip, None)
 
 
 # =====================================
@@ -58,6 +149,21 @@ def login():
 
     if request.method == "POST":
 
+        ip = request.remote_addr or "IP_DESCONHECIDO"
+
+        tempo_restante = verificar_bloqueio_login(ip)
+
+        if tempo_restante > 0:
+            minutos = math.ceil(tempo_restante / 60)
+
+            return render_template(
+                "login.html",
+                erro=(
+                    "Muitas tentativas de login. "
+                    f"Tente novamente em aproximadamente {minutos} minuto(s)."
+                )
+            )
+
         usuario = request.form.get("usuario", "").strip()
         senha = request.form.get("senha", "")
 
@@ -82,11 +188,25 @@ def login():
             if administrador and check_password_hash(
                 administrador["senha_hash"], senha
             ):
+                limpar_tentativas_login(ip)
+
                 session.clear()
+                session.permanent = True
                 session["admin_id"] = administrador["id"]
                 session["admin_nome"] = administrador["nome"]
 
                 return redirect(url_for("painel"))
+
+            tempo_bloqueio = registrar_falha_login(ip)
+
+            if tempo_bloqueio > 0:
+                return render_template(
+                    "login.html",
+                    erro=(
+                        "Limite de tentativas atingido. "
+                        "Seu acesso foi bloqueado por 15 minutos."
+                    )
+                )
 
             return render_template(
                 "login.html",
@@ -145,6 +265,7 @@ def usuarios():
             """
             SELECT id, nome, categoria, id_idface
             FROM usuarios
+            WHERE ativo = 1
             ORDER BY nome ASC
             """
         )
@@ -251,7 +372,6 @@ def registros_acesso():
         )
 
     except mysql.connector.Error as erro:
-
         print(f"Erro ao consultar registros de acesso: {erro}")
 
         return render_template(
@@ -326,7 +446,6 @@ def novo_usuario():
         id_usuario = cursor.lastrowid
 
         with IDFaceClient() as idface:
-
             id_idface = idface.cadastrar_usuario(
                 id_usuario,
                 nome
@@ -415,12 +534,14 @@ def editar_usuario(id_usuario):
             SELECT id, nome, categoria, id_idface
             FROM usuarios
             WHERE id = %s
+              AND ativo = 1
             """,
             (id_usuario,)
         )
 
         usuario = cursor.fetchone()
 
+        # Cadastros históricos não podem ser editados.
         if not usuario:
             return redirect(url_for("usuarios"))
 
@@ -463,7 +584,6 @@ def editar_usuario(id_usuario):
 
         try:
             with IDFaceClient() as idface:
-
                 idface.editar_usuario(
                     id_idface,
                     nome
@@ -479,6 +599,7 @@ def editar_usuario(id_usuario):
                 UPDATE usuarios
                 SET nome = %s, categoria = %s
                 WHERE id = %s
+                  AND ativo = 1
                 """,
                 (nome, categoria, id_usuario)
             )
@@ -501,7 +622,6 @@ def editar_usuario(id_usuario):
 
             try:
                 with IDFaceClient() as idface:
-
                     idface.editar_usuario(
                         id_idface,
                         nome_anterior
@@ -564,9 +684,10 @@ def excluir_usuario(id_usuario):
 
         cursor.execute(
             """
-            SELECT id, nome, id_idface
+            SELECT id, nome, id_idface, categoria
             FROM usuarios
             WHERE id = %s
+              AND ativo = 1
             """,
             (id_usuario,)
         )
@@ -576,16 +697,28 @@ def excluir_usuario(id_usuario):
         if not usuario:
             return redirect(url_for("usuarios"))
 
-        if usuario["id_idface"] is not None:
+        # Administradores devem ser gerenciados pela
+        # área específica de administradores.
+        if usuario["categoria"] == "administrador":
+            print(
+                "Exclusão bloqueada: o cadastro pertence "
+                "à categoria administrador."
+            )
+            return redirect(url_for("usuarios"))
 
+        # Primeiro remove o usuário do iDFace.
+        if usuario["id_idface"] is not None:
             with IDFaceClient() as idface:
                 idface.excluir_usuario(
                     usuario["id_idface"]
                 )
 
+        # Preserva o cadastro no MySQL para manter
+        # o vínculo com o histórico de acessos.
         cursor.execute(
             """
-            DELETE FROM usuarios
+            UPDATE usuarios
+            SET ativo = 0
             WHERE id = %s
             """,
             (id_usuario,)
@@ -596,7 +729,8 @@ def excluir_usuario(id_usuario):
         print(
             f"Usuário excluído: {usuario['nome']} | "
             f"MySQL: {id_usuario} | "
-            f"iDFace: {usuario['id_idface']}"
+            f"iDFace: {usuario['id_idface']} | "
+            "Histórico preservado."
         )
 
         return redirect(url_for("usuarios"))
@@ -620,7 +754,7 @@ def excluir_usuario(id_usuario):
         if usuario and usuario["id_idface"] is not None:
             print(
                 "ATENÇÃO: o usuário pode ter sido removido "
-                "do iDFace, mas sua exclusão no MySQL falhou. "
+                "do iDFace, mas sua inativação no MySQL falhou. "
                 "Verifique a sincronização antes de tentar novamente."
             )
 
@@ -672,7 +806,6 @@ def administradores():
         )
 
     except mysql.connector.Error as erro:
-
         print(f"Erro ao consultar administradores: {erro}")
 
         return render_template(
@@ -756,7 +889,6 @@ def novo_administrador():
         return redirect(url_for("administradores"))
 
     except mysql.connector.IntegrityError as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -770,7 +902,6 @@ def novo_administrador():
         )
 
     except mysql.connector.Error as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -892,7 +1023,6 @@ def editar_administrador(id_administrador):
         return redirect(url_for("administradores"))
 
     except mysql.connector.IntegrityError as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -905,7 +1035,6 @@ def editar_administrador(id_administrador):
         )
 
     except mysql.connector.Error as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -938,7 +1067,6 @@ def alterar_status_administrador(id_administrador):
     if not administrador_logado():
         return redirect(url_for("login"))
 
-    # Impede que o administrador desative a própria conta.
     if id_administrador == session.get("admin_id"):
         return redirect(url_for("administradores"))
 
@@ -965,7 +1093,6 @@ def alterar_status_administrador(id_administrador):
 
         novo_status = not bool(administrador["ativo"])
 
-        # Impede desativar o último administrador ativo.
         if not novo_status:
             total_ativos = contar_administradores_ativos(cursor)
 
@@ -991,7 +1118,6 @@ def alterar_status_administrador(id_administrador):
         return redirect(url_for("administradores"))
 
     except mysql.connector.Error as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -1020,7 +1146,6 @@ def excluir_administrador(id_administrador):
     if not administrador_logado():
         return redirect(url_for("login"))
 
-    # Impede que o administrador exclua a própria conta.
     if id_administrador == session.get("admin_id"):
         return redirect(url_for("administradores"))
 
@@ -1045,7 +1170,6 @@ def excluir_administrador(id_administrador):
         if not administrador:
             return redirect(url_for("administradores"))
 
-        # Impede excluir o último administrador ativo.
         if administrador["ativo"]:
             total_ativos = contar_administradores_ativos(cursor)
 
@@ -1069,7 +1193,6 @@ def excluir_administrador(id_administrador):
         return redirect(url_for("administradores"))
 
     except mysql.connector.Error as erro:
-
         if conexao:
             conexao.rollback()
 
@@ -1123,9 +1246,9 @@ def iniciar_sincronizacao():
 if __name__ == "__main__":
 
     if (
-        not app.debug
+        not DEBUG
         or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
     ):
         iniciar_sincronizacao()
 
-    app.run(debug=True)
+    app.run(debug=DEBUG)
