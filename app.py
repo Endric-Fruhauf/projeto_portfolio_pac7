@@ -161,6 +161,108 @@ def usuarios():
 
 
 # =====================================
+# REGISTROS DE ACESSO
+# =====================================
+
+@app.route("/registros-acesso")
+def registros_acesso():
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    conexao = None
+    cursor = None
+
+    pesquisa = request.args.get("q", "").strip()
+    data_inicio = request.args.get("data_inicio", "").strip()
+    data_fim = request.args.get("data_fim", "").strip()
+
+    registros = []
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        consulta = """
+            SELECT
+                r.id,
+                r.id_idface,
+                r.id_usuario,
+                r.data_hora,
+                r.evento,
+                r.dispositivo_id,
+                u.nome AS nome_usuario
+
+            FROM registros_acesso r
+
+            LEFT JOIN usuarios u
+                ON r.id_usuario = u.id
+
+            WHERE 1 = 1
+        """
+
+        parametros = []
+
+        # Pesquisa pelo nome do usuário
+        if pesquisa:
+            consulta += """
+                AND u.nome LIKE %s
+            """
+            parametros.append(f"%{pesquisa}%")
+
+        # Filtro pela data inicial
+        if data_inicio:
+            consulta += """
+                AND DATE(r.data_hora) >= %s
+            """
+            parametros.append(data_inicio)
+
+        # Filtro pela data final
+        if data_fim:
+            consulta += """
+                AND DATE(r.data_hora) <= %s
+            """
+            parametros.append(data_fim)
+
+        # Ordenar do mais recente para o mais antigo
+        consulta += """
+            ORDER BY r.data_hora DESC, r.id DESC
+        """
+
+        cursor.execute(consulta, tuple(parametros))
+
+        registros = cursor.fetchall()
+
+        return render_template(
+            "registros_acesso.html",
+            registros=registros,
+            pesquisa=pesquisa,
+            data_inicio=data_inicio,
+            data_fim=data_fim
+        )
+
+    except mysql.connector.Error as erro:
+
+        print(f"Erro ao consultar registros de acesso: {erro}")
+
+        return render_template(
+            "registros_acesso.html",
+            registros=[],
+            pesquisa=pesquisa,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            erro="Não foi possível carregar os registros de acesso."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
 # CADASTRAR NOVO USUARIO
 # =====================================
 
@@ -565,10 +667,6 @@ def iniciar_sincronizacao():
 
 if __name__ == "__main__":
 
-    # Com debug=True, o Flask utiliza um processo
-    # adicional para recarregar o código.
-    # A sincronização deve iniciar somente no processo
-    # que realmente atende às requisições.
     if (
         not app.debug
         or os.environ.get("WERKZEUG_RUN_MAIN") == "true"
