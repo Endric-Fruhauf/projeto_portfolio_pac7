@@ -1,7 +1,7 @@
 
 from flask import Flask, render_template, request, redirect, url_for, session
 import mysql.connector
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from threading import Thread
 import os
 
@@ -34,6 +34,19 @@ def conectar_banco():
 
 def administrador_logado():
     return "admin_id" in session
+
+
+def contar_administradores_ativos(cursor):
+    cursor.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM administradores
+        WHERE ativo = TRUE
+        """
+    )
+
+    resultado = cursor.fetchone()
+    return resultado["total"]
 
 
 # =====================================
@@ -203,28 +216,24 @@ def registros_acesso():
 
         parametros = []
 
-        # Pesquisa pelo nome do usuário
         if pesquisa:
             consulta += """
                 AND u.nome LIKE %s
             """
             parametros.append(f"%{pesquisa}%")
 
-        # Filtro pela data inicial
         if data_inicio:
             consulta += """
                 AND DATE(r.data_hora) >= %s
             """
             parametros.append(data_inicio)
 
-        # Filtro pela data final
         if data_fim:
             consulta += """
                 AND DATE(r.data_hora) <= %s
             """
             parametros.append(data_fim)
 
-        # Ordenar do mais recente para o mais antigo
         consulta += """
             ORDER BY r.data_hora DESC, r.id DESC
         """
@@ -306,7 +315,6 @@ def novo_usuario():
         conexao = conectar_banco()
         cursor = conexao.cursor()
 
-        # 1. Criar o cadastro no MySQL.
         cursor.execute(
             """
             INSERT INTO usuarios (nome, categoria)
@@ -317,7 +325,6 @@ def novo_usuario():
 
         id_usuario = cursor.lastrowid
 
-        # 2. Criar o usuário no iDFace.
         with IDFaceClient() as idface:
 
             id_idface = idface.cadastrar_usuario(
@@ -325,13 +332,11 @@ def novo_usuario():
                 nome
             )
 
-            # 3. Configurar o privilégio no equipamento.
             idface.definir_administrador(
                 id_idface,
                 categoria == "administrador"
             )
 
-        # 4. Associar os identificadores.
         cursor.execute(
             """
             UPDATE usuarios
@@ -341,7 +346,6 @@ def novo_usuario():
             (id_idface, id_usuario)
         )
 
-        # 5. Confirmar o cadastro no MySQL.
         conexao.commit()
 
         print(
@@ -621,6 +625,457 @@ def excluir_usuario(id_usuario):
             )
 
         return redirect(url_for("usuarios"))
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
+# ADMINISTRADORES
+# =====================================
+
+@app.route("/administradores")
+def administradores():
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                nome,
+                usuario,
+                ativo,
+                data_cadastro
+            FROM administradores
+            ORDER BY nome ASC
+            """
+        )
+
+        lista_administradores = cursor.fetchall()
+
+        return render_template(
+            "administradores.html",
+            administradores=lista_administradores
+        )
+
+    except mysql.connector.Error as erro:
+
+        print(f"Erro ao consultar administradores: {erro}")
+
+        return render_template(
+            "administradores.html",
+            administradores=[],
+            erro="Não foi possível carregar os administradores."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
+# CADASTRAR ADMINISTRADOR
+# =====================================
+
+@app.route("/administradores/novo", methods=["GET", "POST"])
+def novo_administrador():
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return render_template("novo_administrador.html")
+
+    nome = request.form.get("nome", "").strip()
+    usuario = request.form.get("usuario", "").strip()
+    senha = request.form.get("senha", "")
+    confirmar_senha = request.form.get("confirmar_senha", "")
+
+    if not nome or not usuario or not senha:
+        return render_template(
+            "novo_administrador.html",
+            erro="Preencha todos os campos.",
+            nome=nome,
+            usuario=usuario
+        )
+
+    if len(senha) < 8:
+        return render_template(
+            "novo_administrador.html",
+            erro="A senha deve possuir pelo menos 8 caracteres.",
+            nome=nome,
+            usuario=usuario
+        )
+
+    if senha != confirmar_senha:
+        return render_template(
+            "novo_administrador.html",
+            erro="As senhas informadas não coincidem.",
+            nome=nome,
+            usuario=usuario
+        )
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+
+        senha_hash = generate_password_hash(senha)
+
+        cursor.execute(
+            """
+            INSERT INTO administradores
+                (nome, usuario, senha_hash, ativo)
+            VALUES (%s, %s, %s, TRUE)
+            """,
+            (nome, usuario, senha_hash)
+        )
+
+        conexao.commit()
+
+        print(f"Administrador cadastrado: {usuario}")
+
+        return redirect(url_for("administradores"))
+
+    except mysql.connector.IntegrityError as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro de integridade ao cadastrar administrador: {erro}")
+
+        return render_template(
+            "novo_administrador.html",
+            erro="Esse nome de usuário já está sendo utilizado.",
+            nome=nome,
+            usuario=usuario
+        )
+
+    except mysql.connector.Error as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro ao cadastrar administrador: {erro}")
+
+        return render_template(
+            "novo_administrador.html",
+            erro="Não foi possível cadastrar o administrador.",
+            nome=nome,
+            usuario=usuario
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
+# EDITAR ADMINISTRADOR
+# =====================================
+
+@app.route(
+    "/administradores/editar/<int:id_administrador>",
+    methods=["GET", "POST"]
+)
+def editar_administrador(id_administrador):
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT id, nome, usuario, ativo
+            FROM administradores
+            WHERE id = %s
+            """,
+            (id_administrador,)
+        )
+
+        administrador = cursor.fetchone()
+
+        if not administrador:
+            return redirect(url_for("administradores"))
+
+        if request.method == "GET":
+            return render_template(
+                "editar_administrador.html",
+                administrador=administrador
+            )
+
+        nome = request.form.get("nome", "").strip()
+        usuario = request.form.get("usuario", "").strip()
+        senha = request.form.get("senha", "")
+        confirmar_senha = request.form.get("confirmar_senha", "")
+
+        if not nome or not usuario:
+            return render_template(
+                "editar_administrador.html",
+                administrador=administrador,
+                erro="Nome e usuário são obrigatórios."
+            )
+
+        if senha and len(senha) < 8:
+            return render_template(
+                "editar_administrador.html",
+                administrador=administrador,
+                erro="A nova senha deve possuir pelo menos 8 caracteres."
+            )
+
+        if senha and senha != confirmar_senha:
+            return render_template(
+                "editar_administrador.html",
+                administrador=administrador,
+                erro="As senhas informadas não coincidem."
+            )
+
+        if senha:
+            senha_hash = generate_password_hash(senha)
+
+            cursor.execute(
+                """
+                UPDATE administradores
+                SET nome = %s,
+                    usuario = %s,
+                    senha_hash = %s
+                WHERE id = %s
+                """,
+                (nome, usuario, senha_hash, id_administrador)
+            )
+
+        else:
+            cursor.execute(
+                """
+                UPDATE administradores
+                SET nome = %s,
+                    usuario = %s
+                WHERE id = %s
+                """,
+                (nome, usuario, id_administrador)
+            )
+
+        conexao.commit()
+
+        if id_administrador == session.get("admin_id"):
+            session["admin_nome"] = nome
+
+        print(f"Administrador atualizado: {usuario}")
+
+        return redirect(url_for("administradores"))
+
+    except mysql.connector.IntegrityError as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro de integridade ao editar administrador: {erro}")
+
+        return render_template(
+            "editar_administrador.html",
+            administrador=administrador,
+            erro="Esse nome de usuário já está sendo utilizado."
+        )
+
+    except mysql.connector.Error as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro ao editar administrador: {erro}")
+
+        return render_template(
+            "editar_administrador.html",
+            administrador=administrador,
+            erro="Não foi possível atualizar o administrador."
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
+# ATIVAR / DESATIVAR ADMINISTRADOR
+# =====================================
+
+@app.route(
+    "/administradores/status/<int:id_administrador>",
+    methods=["POST"]
+)
+def alterar_status_administrador(id_administrador):
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    # Impede que o administrador desative a própria conta.
+    if id_administrador == session.get("admin_id"):
+        return redirect(url_for("administradores"))
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT id, ativo
+            FROM administradores
+            WHERE id = %s
+            """,
+            (id_administrador,)
+        )
+
+        administrador = cursor.fetchone()
+
+        if not administrador:
+            return redirect(url_for("administradores"))
+
+        novo_status = not bool(administrador["ativo"])
+
+        # Impede desativar o último administrador ativo.
+        if not novo_status:
+            total_ativos = contar_administradores_ativos(cursor)
+
+            if total_ativos <= 1:
+                return redirect(url_for("administradores"))
+
+        cursor.execute(
+            """
+            UPDATE administradores
+            SET ativo = %s
+            WHERE id = %s
+            """,
+            (novo_status, id_administrador)
+        )
+
+        conexao.commit()
+
+        print(
+            f"Status do administrador {id_administrador}: "
+            f"{'ativo' if novo_status else 'inativo'}"
+        )
+
+        return redirect(url_for("administradores"))
+
+    except mysql.connector.Error as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro ao alterar status do administrador: {erro}")
+
+        return redirect(url_for("administradores"))
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
+# EXCLUIR ADMINISTRADOR
+# =====================================
+
+@app.route(
+    "/administradores/excluir/<int:id_administrador>",
+    methods=["POST"]
+)
+def excluir_administrador(id_administrador):
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    # Impede que o administrador exclua a própria conta.
+    if id_administrador == session.get("admin_id"):
+        return redirect(url_for("administradores"))
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT id, nome, ativo
+            FROM administradores
+            WHERE id = %s
+            """,
+            (id_administrador,)
+        )
+
+        administrador = cursor.fetchone()
+
+        if not administrador:
+            return redirect(url_for("administradores"))
+
+        # Impede excluir o último administrador ativo.
+        if administrador["ativo"]:
+            total_ativos = contar_administradores_ativos(cursor)
+
+            if total_ativos <= 1:
+                return redirect(url_for("administradores"))
+
+        cursor.execute(
+            """
+            DELETE FROM administradores
+            WHERE id = %s
+            """,
+            (id_administrador,)
+        )
+
+        conexao.commit()
+
+        print(
+            f"Administrador excluído: {administrador['nome']}"
+        )
+
+        return redirect(url_for("administradores"))
+
+    except mysql.connector.Error as erro:
+
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro ao excluir administrador: {erro}")
+
+        return redirect(url_for("administradores"))
 
     finally:
         if cursor:
