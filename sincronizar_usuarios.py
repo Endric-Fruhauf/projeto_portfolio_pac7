@@ -1,8 +1,82 @@
+
 import re
 import mysql.connector
 import config
 
 from idface import IDFaceError
+
+
+# Limites de segurança para exclusões de usuários desconhecidos.
+PERCENTUAL_MAXIMO_EXCLUSOES = 10
+LIMITE_MINIMO_EXCLUSOES = 2
+LIMITE_MAXIMO_EXCLUSOES = 5
+
+
+def _calcular_limite_exclusoes(quantidade_usuarios_ativos):
+    """
+    Calcula o limite de exclusões desconhecidas.
+
+    Permite aproximadamente 10% dos usuários ativos,
+    respeitando o mínimo de 2 e o máximo de 5 exclusões.
+    """
+
+    limite = (
+        quantidade_usuarios_ativos * PERCENTUAL_MAXIMO_EXCLUSOES + 99
+    ) // 100
+
+    return max(
+        LIMITE_MINIMO_EXCLUSOES,
+        min(LIMITE_MAXIMO_EXCLUSOES, limite)
+    )
+
+
+def _validar_usuarios_idface(usuarios):
+    """
+    Valida os registros recebidos do equipamento antes
+    de qualquer alteração no MySQL ou no iDFace.
+    """
+
+    if not isinstance(usuarios, list):
+        raise IDFaceError(
+            "A consulta de usuários do iDFace não retornou uma lista."
+        )
+
+    ids_encontrados = set()
+
+    for usuario in usuarios:
+
+        if not isinstance(usuario, dict):
+            raise IDFaceError(
+                "O iDFace retornou um registro de usuário inválido."
+            )
+
+        id_idface = usuario.get("id")
+
+        if id_idface is None or isinstance(id_idface, bool):
+            raise IDFaceError(
+                "O iDFace retornou um usuário sem ID válido."
+            )
+
+        try:
+            id_idface = int(id_idface)
+
+        except (ValueError, TypeError):
+            raise IDFaceError(
+                "O iDFace retornou um ID de usuário inválido."
+            )
+
+        if id_idface <= 0:
+            raise IDFaceError(
+                "O iDFace retornou um ID de usuário inválido."
+            )
+
+        if id_idface in ids_encontrados:
+            raise IDFaceError(
+                f"O iDFace retornou o ID {id_idface} mais de uma vez. "
+                "A sincronização foi interrompida por segurança."
+            )
+
+        ids_encontrados.add(id_idface)
 
 
 def _registrar_idface_historico(cursor, id_usuario, id_idface):
@@ -173,7 +247,15 @@ def _restaurar_fotos(idface, cursor, usuarios_ativos, fotos_restauradas):
             if id_idface is None:
                 continue
 
-            id_idface = int(id_idface)
+            try:
+                id_idface = int(id_idface)
+
+            except (ValueError, TypeError):
+                print(
+                    "Foto ignorada: o iDFace retornou um ID inválido."
+                )
+                continue
+
             fotos_recebidas.add(id_idface)
 
             usuario = usuarios_por_idface.get(id_idface)
@@ -188,16 +270,26 @@ def _restaurar_fotos(idface, cursor, usuarios_ativos, fotos_restauradas):
 
             if imagem and timestamp is not None:
 
+                try:
+                    timestamp = int(timestamp)
+
+                except (ValueError, TypeError):
+                    print(
+                        f"Timestamp inválido na foto de "
+                        f"{usuario['nome']}."
+                    )
+                    continue
+
                 foto_salva = _obter_foto_salva(cursor, id_mysql)
 
                 if (
                     foto_salva is None
-                    or int(timestamp) > int(foto_salva[0])
+                    or timestamp > int(foto_salva[0])
                 ):
                     _salvar_foto(
                         cursor,
                         id_mysql,
-                        int(timestamp),
+                        timestamp,
                         imagem
                     )
 
@@ -207,7 +299,7 @@ def _restaurar_fotos(idface, cursor, usuarios_ativos, fotos_restauradas):
                         f"ID MySQL: {id_mysql}"
                     )
 
-                elif int(foto_salva[0]) > int(timestamp):
+                elif int(foto_salva[0]) > timestamp:
 
                     try:
                         idface.restaurar_foto_usuario(
@@ -300,24 +392,35 @@ def sincronizar_usuarios(idface):
         "fotos_restauradas": 0,
         "excluidos": 0,
         "ignorados": 0,
+        "exclusoes_desconhecidos_bloqueadas": 0,
         "sucesso": False
     }
 
     try:
         print("=== SINCRONIZACAO DE USUARIOS ===\n")
 
+        # =====================================
+        # 1. CONSULTAR E VALIDAR O IDFACE
+        # =====================================
+
         usuarios_idface = idface.consultar_usuarios()
         privilegios = idface.consultar_privilegios()
 
-        if not isinstance(usuarios_idface, list):
-            raise ValueError(
-                "Resposta inválida ao consultar usuários no iDFace."
-            )
+        _validar_usuarios_idface(usuarios_idface)
 
         if not isinstance(privilegios, list):
-            raise ValueError(
+            raise IDFaceError(
                 "Resposta inválida ao consultar privilégios no iDFace."
             )
+
+        if not all(isinstance(item, dict) for item in privilegios):
+            raise IDFaceError(
+                "O iDFace retornou registros de permissões inválidos."
+            )
+
+        # =====================================
+        # 2. CONECTAR AO MYSQL
+        # =====================================
 
         conexao = mysql.connector.connect(
             host=config.MYSQL_HOST,
@@ -335,7 +438,7 @@ def sincronizar_usuarios(idface):
         )
 
         # =====================================
-        # 1. CONSULTAR USUÁRIOS DO MYSQL
+        # 3. CONSULTAR USUÁRIOS DO MYSQL
         # =====================================
 
         cursor.execute(
@@ -348,45 +451,161 @@ def sincronizar_usuarios(idface):
 
         registros_mysql = cursor.fetchall()
 
-        usuarios_por_idface = {
-            int(registro[1]): {
+        usuarios_por_idface = {}
+
+        for registro in registros_mysql:
+
+            id_idface = int(registro[1])
+
+            if id_idface in usuarios_por_idface:
+                raise RuntimeError(
+                    f"O ID iDFace {id_idface} está vinculado "
+                    "a mais de um usuário no MySQL. "
+                    "Sincronização interrompida por segurança."
+                )
+
+            usuarios_por_idface[id_idface] = {
                 "id": registro[0],
                 "id_idface": registro[1],
                 "nome": registro[2],
                 "categoria": registro[3],
                 "ativo": registro[4]
             }
-            for registro in registros_mysql
-        }
+
+        # =====================================
+        # 4. VERIFICAR SEGURANÇA DA BASE MYSQL
+        # =====================================
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM usuarios
+            WHERE ativo = 1
+            """
+        )
+
+        quantidade_usuarios_ativos = int(cursor.fetchone()[0])
+
+        # O projeto possui uma conta MASTER que deve permanecer ativa.
+        # Uma base sem usuários ativos não é considerada segura para
+        # executar operações de sincronização no equipamento.
+
+        if quantidade_usuarios_ativos == 0:
+            raise RuntimeError(
+                "O MySQL não possui usuários ativos. "
+                "A sincronização foi interrompida para evitar "
+                "alterações indevidas no iDFace."
+            )
+
+        print(
+            f"Usuários ativos no MySQL: "
+            f"{quantidade_usuarios_ativos}"
+        )
+
+        # =====================================
+        # 5. IDENTIFICAR USUÁRIOS DESCONHECIDOS
+        # =====================================
+
+        usuarios_desconhecidos = []
+
+        for usuario in usuarios_idface:
+
+            id_idface = int(usuario["id"])
+
+            if id_idface in usuarios_por_idface:
+                continue
+
+            usuario_recuperado = _recuperar_usuario_por_matricula(
+                cursor,
+                usuario.get("registration")
+            )
+
+            if usuario_recuperado is None:
+                usuarios_desconhecidos.append({
+                    "id": id_idface,
+                    "nome": usuario.get("name") or "Nome não informado",
+                    "matricula": (
+                        usuario.get("registration")
+                        or "Matrícula não informada"
+                    )
+                })
+
+        quantidade_desconhecidos = len(usuarios_desconhecidos)
+
+        limite_exclusoes = _calcular_limite_exclusoes(
+            quantidade_usuarios_ativos
+        )
+
+        permitir_exclusao_desconhecidos = (
+            quantidade_desconhecidos <= limite_exclusoes
+        )
+
+        if usuarios_desconhecidos:
+
+            print("\n=== USUÁRIOS DESCONHECIDOS IDENTIFICADOS ===")
+
+            for usuario in usuarios_desconhecidos:
+                print(
+                    f"Nome: {usuario['nome']} | "
+                    f"ID iDFace: {usuario['id']} | "
+                    f"Matrícula: {usuario['matricula']}"
+                )
+
+            print(
+                f"\nTotal de desconhecidos: "
+                f"{quantidade_desconhecidos}"
+            )
+
+            print(
+                f"Limite de segurança desta execução: "
+                f"{limite_exclusoes}"
+            )
+
+            if permitir_exclusao_desconhecidos:
+                print(
+                    "A quantidade está dentro do limite. "
+                    "As exclusões poderão ser realizadas."
+                )
+
+            else:
+                print(
+                    "ATENÇÃO: limite de segurança ultrapassado."
+                )
+                print(
+                    "Todas as exclusões de desconhecidos foram "
+                    "bloqueadas nesta sincronização."
+                )
+                print(
+                    "A recriação automática de contas ausentes "
+                    "também será suspensa nesta execução."
+                )
+
+        else:
+            print(
+                "\nNenhum usuário desconhecido foi encontrado."
+            )
 
         # Contém somente IDs de contas autorizadas que continuam
         # presentes no equipamento.
         ids_presentes = set()
 
         # =====================================
-        # 2. PROCESSAR USUÁRIOS DO IDFACE
+        # 6. PROCESSAR USUÁRIOS DO IDFACE
         # =====================================
 
         for usuario in usuarios_idface:
 
-            id_idface = usuario.get("id")
+            id_idface = int(usuario["id"])
             nome_idface = usuario.get("name")
-
-            if id_idface is None:
-                resultado_sync["ignorados"] += 1
-                continue
-
-            id_idface = int(id_idface)
 
             existente = usuarios_por_idface.get(id_idface)
 
-            # -------------------------------------------------
-            # 2.1. USUÁRIO JÁ VINCULADO AO MYSQL
-            # -------------------------------------------------
+            # ---------------------------------
+            # 6.1. USUÁRIO JÁ VINCULADO AO MYSQL
+            # ---------------------------------
 
             if existente:
 
-                # Registra ou confirma o ID no histórico.
                 _registrar_idface_historico(
                     cursor,
                     existente["id"],
@@ -394,9 +613,20 @@ def sincronizar_usuarios(idface):
                 )
 
                 if not existente["ativo"]:
-                    # A conta foi desativada pelo site.
-                    # Remove do equipamento, mas preserva o backup
-                    # facial e os registros históricos no MySQL.
+
+                    # Contas administrativas não são removidas
+                    # automaticamente pela sincronização.
+                    if existente["categoria"] == "administrador":
+
+                        resultado_sync["ignorados"] += 1
+
+                        print(
+                            f"Conta administrativa inativa preservada: "
+                            f"{existente['nome']} | "
+                            f"ID iDFace: {id_idface}"
+                        )
+
+                        continue
 
                     try:
                         idface.excluir_usuario(id_idface)
@@ -405,10 +635,13 @@ def sincronizar_usuarios(idface):
 
                         print(
                             f"Conta inativa removida do iDFace: "
-                            f"{existente['nome']}"
+                            f"{existente['nome']} | "
+                            f"ID: {id_idface}"
                         )
 
                     except IDFaceError as erro:
+                        resultado_sync["ignorados"] += 1
+
                         print(
                             f"Não foi possível remover a conta "
                             f"inativa {id_idface}: {erro}"
@@ -416,11 +649,8 @@ def sincronizar_usuarios(idface):
 
                     continue
 
-                # O ID é considerado presente mesmo quando o
-                # equipamento não retorna o nome do usuário.
                 ids_presentes.add(id_idface)
 
-                # O MySQL é a referência para o nome.
                 if nome_idface and nome_idface != existente["nome"]:
 
                     try:
@@ -445,9 +675,9 @@ def sincronizar_usuarios(idface):
 
                 continue
 
-            # -------------------------------------------------
-            # 2.2. TENTAR RECUPERAR O VÍNCULO PELA MATRÍCULA WBZ
-            # -------------------------------------------------
+            # ---------------------------------
+            # 6.2. RECUPERAR VÍNCULO PELA MATRÍCULA
+            # ---------------------------------
 
             usuario_recuperado = _recuperar_usuario_por_matricula(
                 cursor,
@@ -465,8 +695,20 @@ def sincronizar_usuarios(idface):
                 ) = usuario_recuperado
 
                 if not ativo_mysql:
-                    # A matrícula pertence a uma conta desativada.
-                    # O cadastro no equipamento não é autorizado.
+
+                    # Contas administrativas inativas não podem
+                    # ser removidas automaticamente do equipamento.
+                    if categoria_mysql == "administrador":
+
+                        resultado_sync["ignorados"] += 1
+
+                        print(
+                            f"Conta administrativa inativa identificada "
+                            f"pela matrícula e preservada: {nome_mysql} | "
+                            f"ID iDFace: {id_idface}"
+                        )
+
+                        continue
 
                     try:
                         idface.excluir_usuario(id_idface)
@@ -479,6 +721,8 @@ def sincronizar_usuarios(idface):
                         )
 
                     except IDFaceError as erro:
+                        resultado_sync["ignorados"] += 1
+
                         print(
                             f"Falha ao remover conta inativa "
                             f"{id_idface}: {erro}"
@@ -486,8 +730,6 @@ def sincronizar_usuarios(idface):
 
                     continue
 
-                # Não permite que uma matrícula gere duas contas
-                # simultâneas para o mesmo usuário.
                 if (
                     id_anterior is not None
                     and int(id_anterior) != id_idface
@@ -505,8 +747,6 @@ def sincronizar_usuarios(idface):
 
                     continue
 
-                # Registra o ID anterior, caso ainda não esteja
-                # presente no histórico.
                 if id_anterior is not None:
                     _registrar_idface_historico(
                         cursor,
@@ -514,7 +754,6 @@ def sincronizar_usuarios(idface):
                         id_anterior
                     )
 
-                # Registra o novo ID antes de atualizar o vínculo atual.
                 _registrar_idface_historico(
                     cursor,
                     id_mysql,
@@ -556,7 +795,6 @@ def sincronizar_usuarios(idface):
                     f"iDFace: {id_idface}"
                 )
 
-                # Corrige o nome do equipamento conforme o MySQL.
                 if nome_idface and nome_idface != nome_mysql:
 
                     try:
@@ -573,12 +811,27 @@ def sincronizar_usuarios(idface):
 
                 continue
 
-            # -------------------------------------------------
-            # 2.3. USUÁRIO DESCONHECIDO: REMOVER DO IDFACE
-            # -------------------------------------------------
+            # ---------------------------------
+            # 6.3. USUÁRIO DESCONHECIDO
+            # ---------------------------------
 
-            # Não cria registros no MySQL a partir do equipamento.
-            # Somente usuários cadastrados pelo site são autorizados.
+            if not permitir_exclusao_desconhecidos:
+
+                resultado_sync["ignorados"] += 1
+
+                resultado_sync[
+                    "exclusoes_desconhecidos_bloqueadas"
+                ] += 1
+
+                print(
+                    f"Exclusão bloqueada: "
+                    f"{nome_idface or 'Nome não informado'} | "
+                    f"ID: {id_idface} | "
+                    f"Matrícula: "
+                    f"{usuario.get('registration') or 'Não informada'}"
+                )
+
+                continue
 
             try:
                 idface.excluir_usuario(id_idface)
@@ -588,7 +841,9 @@ def sincronizar_usuarios(idface):
                 print(
                     f"Cadastro desconhecido removido do iDFace: "
                     f"{nome_idface or 'Nome não informado'} | "
-                    f"ID: {id_idface}"
+                    f"ID: {id_idface} | "
+                    f"Matrícula: "
+                    f"{usuario.get('registration') or 'Não informada'}"
                 )
 
             except IDFaceError as erro:
@@ -602,7 +857,7 @@ def sincronizar_usuarios(idface):
         conexao.commit()
 
         # =====================================
-        # 3. RECARREGAR USUÁRIOS ATIVOS
+        # 7. RECARREGAR USUÁRIOS ATIVOS
         # =====================================
 
         cursor.execute(
@@ -624,119 +879,119 @@ def sincronizar_usuarios(idface):
         ]
 
         # =====================================
-        # 4. RECRIAR CONTAS AUSENTES NO IDFACE
+        # 8. RECRIAR CONTAS AUSENTES NO IDFACE
         # =====================================
 
-        for usuario in usuarios_ativos:
+        if permitir_exclusao_desconhecidos:
 
-            id_mysql = usuario["id"]
-            id_anterior = usuario["id_idface"]
+            for usuario in usuarios_ativos:
 
-            if id_anterior is None:
-                continue
+                id_mysql = usuario["id"]
+                id_anterior = usuario["id_idface"]
 
-            if int(id_anterior) in ids_presentes:
-                continue
+                if id_anterior is None:
+                    continue
 
+                if int(id_anterior) in ids_presentes:
+                    continue
+
+                print(
+                    f"\nConta ativa ausente no iDFace: "
+                    f"{usuario['nome']}"
+                )
+
+                novo_id_idface = None
+
+                try:
+                    novo_id_idface = idface.cadastrar_usuario(
+                        id_mysql,
+                        usuario["nome"]
+                    )
+
+                    if usuario["categoria"] == "administrador":
+                        idface.definir_administrador(
+                            novo_id_idface,
+                            True
+                        )
+
+                    _registrar_idface_historico(
+                        cursor,
+                        id_mysql,
+                        novo_id_idface
+                    )
+
+                    cursor.execute(
+                        """
+                        UPDATE usuarios
+                        SET id_idface = %s
+                        WHERE id = %s
+                          AND ativo = 1
+                        """,
+                        (novo_id_idface, id_mysql)
+                    )
+
+                    if cursor.rowcount != 1:
+                        raise ValueError(
+                            f"Não foi possível atualizar o vínculo "
+                            f"do usuário {id_mysql}."
+                        )
+
+                    conexao.commit()
+
+                    usuario["id_idface"] = novo_id_idface
+
+                    ids_presentes.add(int(novo_id_idface))
+
+                    resultado_sync["restaurados"] += 1
+
+                    print(
+                        f"Conta recriada: {usuario['nome']} | "
+                        f"MySQL: {id_mysql} | "
+                        f"Novo iDFace: {novo_id_idface}"
+                    )
+
+                except Exception as erro:
+
+                    if conexao and conexao.is_connected():
+                        conexao.rollback()
+
+                    print(
+                        f"Falha ao recriar {usuario['nome']}: {erro}"
+                    )
+
+                    if novo_id_idface is not None:
+                        try:
+                            cursor.execute(
+                                """
+                                SELECT id_idface
+                                FROM usuarios
+                                WHERE id = %s
+                                """,
+                                (id_mysql,)
+                            )
+
+                            vinculo_atual = cursor.fetchone()
+
+                            if (
+                                vinculo_atual
+                                and vinculo_atual[0] != novo_id_idface
+                            ):
+                                idface.excluir_usuario(novo_id_idface)
+
+                        except Exception as erro_compensacao:
+                            print(
+                                "ATENÇÃO: não foi possível remover "
+                                "a conta incompleta:",
+                                erro_compensacao
+                            )
+
+        else:
             print(
-                f"\nConta ativa ausente no iDFace: "
-                f"{usuario['nome']}"
+                "\nRecriação automática suspensa por segurança."
             )
 
-            novo_id_idface = None
-
-            try:
-                novo_id_idface = idface.cadastrar_usuario(
-                    id_mysql,
-                    usuario["nome"]
-                )
-
-                # Se o cadastro for administrativo, concede o papel
-                # de administrador no equipamento.
-                # ADM e MASTER usam o mesmo papel no iDFace.
-                if usuario["categoria"] == "administrador":
-                    idface.definir_administrador(
-                        novo_id_idface,
-                        True
-                    )
-
-                # Registra o novo ID no histórico.
-                _registrar_idface_historico(
-                    cursor,
-                    id_mysql,
-                    novo_id_idface
-                )
-
-                # Atualiza o vínculo atual no MySQL.
-                cursor.execute(
-                    """
-                    UPDATE usuarios
-                    SET id_idface = %s
-                    WHERE id = %s
-                      AND ativo = 1
-                    """,
-                    (novo_id_idface, id_mysql)
-                )
-
-                if cursor.rowcount != 1:
-                    raise ValueError(
-                        f"Não foi possível atualizar o vínculo "
-                        f"do usuário {id_mysql}."
-                    )
-
-                conexao.commit()
-
-                usuario["id_idface"] = novo_id_idface
-
-                ids_presentes.add(int(novo_id_idface))
-
-                resultado_sync["restaurados"] += 1
-
-                print(
-                    f"Conta recriada: {usuario['nome']} | "
-                    f"MySQL: {id_mysql} | "
-                    f"Novo iDFace: {novo_id_idface}"
-                )
-
-            except Exception as erro:
-
-                if conexao and conexao.is_connected():
-                    conexao.rollback()
-
-                print(
-                    f"Falha ao recriar {usuario['nome']}: {erro}"
-                )
-
-                # Se a criação ocorreu, mas alguma etapa posterior
-                # falhou, tenta remover a conta incompleta.
-                if novo_id_idface is not None:
-                    try:
-                        cursor.execute(
-                            """
-                            SELECT id_idface
-                            FROM usuarios
-                            WHERE id = %s
-                            """,
-                            (id_mysql,)
-                        )
-
-                        vinculo_atual = cursor.fetchone()
-
-                        if (
-                            vinculo_atual
-                            and vinculo_atual[0] != novo_id_idface
-                        ):
-                            idface.excluir_usuario(novo_id_idface)
-
-                    except Exception as erro_compensacao:
-                        print(
-                            "ATENÇÃO: não foi possível remover "
-                            "a conta incompleta:",
-                            erro_compensacao
-                        )
-
         # =====================================
-        # 5. RECARREGAR VÍNCULOS ATIVOS
+        # 9. RECARREGAR VÍNCULOS ATIVOS
         # =====================================
 
         cursor.execute(
@@ -759,24 +1014,41 @@ def sincronizar_usuarios(idface):
         ]
 
         # =====================================
-        # 6. CORRIGIR PERMISSÕES DO IDFACE
+        # 10. CORRIGIR PERMISSÕES DO IDFACE
         # =====================================
 
         privilegios = idface.consultar_privilegios()
 
         if not isinstance(privilegios, list):
-            raise ValueError(
+            raise IDFaceError(
                 "Resposta inválida ao consultar privilégios no iDFace."
             )
 
-        administradores_idface = {
-            int(privilegio["user_id"])
-            for privilegio in privilegios
-            if int(privilegio.get("role", 0)) == 1
-            and privilegio.get("user_id") is not None
-        }
+        administradores_idface = set()
 
-        # O MySQL é a referência para a permissão administrativa.
+        for privilegio in privilegios:
+
+            if not isinstance(privilegio, dict):
+                raise IDFaceError(
+                    "O iDFace retornou um registro de permissão inválido."
+                )
+
+            if privilegio.get("role") is None:
+                continue
+
+            try:
+                role = int(privilegio["role"])
+
+                if role == 1 and privilegio.get("user_id") is not None:
+                    administradores_idface.add(
+                        int(privilegio["user_id"])
+                    )
+
+            except (ValueError, TypeError):
+                raise IDFaceError(
+                    "O iDFace retornou dados inválidos de permissões."
+                )
+
         for usuario in usuarios_ativos:
 
             id_idface = int(usuario["id_idface"])
@@ -805,7 +1077,7 @@ def sincronizar_usuarios(idface):
                 )
 
         # =====================================
-        # 7. SINCRONIZAR FOTOS FACIAIS
+        # 11. SINCRONIZAR FOTOS FACIAIS
         # =====================================
 
         contador_fotos = [0]
@@ -824,7 +1096,7 @@ def sincronizar_usuarios(idface):
         resultado_sync["sucesso"] = True
 
         # =====================================
-        # 8. RESULTADO
+        # 12. RESULTADO
         # =====================================
 
         print("\n=== RESULTADO DA SINCRONIZACAO ===")
@@ -834,6 +1106,10 @@ def sincronizar_usuarios(idface):
         print("Fotos restauradas:", resultado_sync["fotos_restauradas"])
         print("Contas removidas:", resultado_sync["excluidos"])
         print("Usuários ignorados:", resultado_sync["ignorados"])
+        print(
+            "Exclusões de desconhecidos bloqueadas:",
+            resultado_sync["exclusoes_desconhecidos_bloqueadas"]
+        )
         print("Sincronização concluída!")
 
     except IDFaceError as erro:

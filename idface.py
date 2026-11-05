@@ -30,6 +30,71 @@ class IDFaceClient:
                 f"Certificado do iDFace não encontrado: {self.certificado}"
             )
 
+    @staticmethod
+    def _validar_lista_resposta(resultado, campo, operacao):
+        """
+        Valida se a resposta contém o campo esperado
+        e se seu conteúdo é uma lista de objetos.
+        """
+
+        if not isinstance(resultado, dict):
+            raise IDFaceError(
+                f"Resposta inválida do iDFace durante {operacao}."
+            )
+
+        if campo not in resultado:
+            raise IDFaceError(
+                f"O iDFace não retornou o campo '{campo}' durante {operacao}."
+            )
+
+        dados = resultado[campo]
+
+        if not isinstance(dados, list):
+            raise IDFaceError(
+                f"O campo '{campo}' retornado pelo iDFace "
+                f"não é uma lista válida durante {operacao}."
+            )
+
+        if not all(isinstance(item, dict) for item in dados):
+            raise IDFaceError(
+                f"O iDFace retornou registros inválidos durante {operacao}."
+            )
+
+        return dados
+
+    @staticmethod
+    def _validar_lista_ids(resultado, campo, operacao):
+        """
+        Valida listas de IDs numéricos retornadas pelo iDFace.
+        """
+
+        if not isinstance(resultado, dict):
+            raise IDFaceError(
+                f"Resposta inválida do iDFace durante {operacao}."
+            )
+
+        if campo not in resultado:
+            raise IDFaceError(
+                f"O iDFace não retornou o campo '{campo}' durante {operacao}."
+            )
+
+        ids = resultado[campo]
+
+        if not isinstance(ids, list):
+            raise IDFaceError(
+                f"O campo '{campo}' não é uma lista válida durante {operacao}."
+            )
+
+        if not all(
+            isinstance(item, int) and not isinstance(item, bool)
+            for item in ids
+        ):
+            raise IDFaceError(
+                f"O iDFace retornou IDs inválidos durante {operacao}."
+            )
+
+        return ids
+
     def conectar(self):
         try:
             resposta = requests.post(
@@ -44,7 +109,14 @@ class IDFaceClient:
 
             resposta.raise_for_status()
 
-            self.session = resposta.json().get("session")
+            resultado = resposta.json()
+
+            if not isinstance(resultado, dict):
+                raise IDFaceError(
+                    "O iDFace retornou uma resposta inválida durante o login."
+                )
+
+            self.session = resultado.get("session")
 
             if not self.session:
                 raise IDFaceError(
@@ -99,6 +171,11 @@ class IDFaceClient:
 
             resultado = resposta.json()
 
+            if not isinstance(resultado, dict):
+                raise IDFaceError(
+                    f"Resposta inválida do iDFace em {endpoint}."
+                )
+
             if "error" in resultado:
                 raise IDFaceError(str(resultado["error"]))
 
@@ -128,7 +205,11 @@ class IDFaceClient:
             {"object": "users"}
         )
 
-        return resultado.get("users", [])
+        return self._validar_lista_resposta(
+            resultado,
+            "users",
+            "consulta de usuários"
+        )
 
     def consultar_privilegios(self):
         resultado = self.requisicao(
@@ -136,7 +217,11 @@ class IDFaceClient:
             {"object": "user_roles"}
         )
 
-        return resultado.get("user_roles", [])
+        return self._validar_lista_resposta(
+            resultado,
+            "user_roles",
+            "consulta de permissões"
+        )
 
     def consultar_fotos_usuarios(self, ids_usuarios):
         """
@@ -163,10 +248,19 @@ class IDFaceClient:
 
             resultado = resposta.json()
 
+            if not isinstance(resultado, dict):
+                raise IDFaceError(
+                    "Resposta inválida ao consultar fotos faciais."
+                )
+
             if "error" in resultado:
                 raise IDFaceError(str(resultado["error"]))
 
-            return resultado.get("user_images", [])
+            return self._validar_lista_resposta(
+                resultado,
+                "user_images",
+                "consulta de fotos faciais"
+            )
 
         except IDFaceError:
             raise
@@ -266,14 +360,18 @@ class IDFaceClient:
             }
         )
 
-        ids = resultado.get("ids", [])
+        ids = self._validar_lista_ids(
+            resultado,
+            "ids",
+            "cadastro de usuário"
+        )
 
         if not ids:
             raise IDFaceError(
                 "O iDFace não retornou o ID do usuário cadastrado."
             )
 
-        return int(ids[0])
+        return ids[0]
 
     def editar_usuario(self, id_idface, nome):
         resultado = self.requisicao(
@@ -293,21 +391,25 @@ class IDFaceClient:
     def definir_administrador(self, id_idface, administrador):
         """
         Define a permissão administrativa no iDFace.
-
         O equipamento possui somente dois níveis relevantes:
         usuário normal e administrador.
-
         ADM e MASTER recebem o mesmo papel no equipamento.
         A distinção entre eles permanece no MySQL.
         """
 
         privilegios = self.consultar_privilegios()
 
-        possui_role_administrativa = any(
-            int(privilegio.get("user_id", -1)) == int(id_idface)
-            and int(privilegio.get("role", 0)) == 1
-            for privilegio in privilegios
-        )
+        try:
+            possui_role_administrativa = any(
+                int(privilegio.get("user_id", -1)) == int(id_idface)
+                and int(privilegio.get("role", 0)) == 1
+                for privilegio in privilegios
+            )
+
+        except (ValueError, TypeError):
+            raise IDFaceError(
+                "O iDFace retornou dados inválidos de permissões."
+            )
 
         if administrador and possui_role_administrativa:
             return

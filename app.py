@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, url_for, session
 import mysql.connector
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -214,7 +213,9 @@ def login():
                 session["admin_id"] = administrador["id"]
                 session["admin_usuario_id"] = administrador["id_usuario"]
                 session["admin_nome"] = administrador["nome"]
-                session["admin_perfil"] = administrador["perfil"] or "administrador"
+                session["admin_perfil"] = (
+                    administrador["perfil"] or "administrador"
+                )
 
                 return redirect(url_for("painel"))
 
@@ -359,12 +360,9 @@ def registros_acesso():
                 r.evento,
                 r.dispositivo_id,
                 u.nome AS nome_usuario
-
             FROM registros_acesso r
-
             LEFT JOIN usuarios u
                 ON r.id_usuario = u.id
-
             WHERE 1 = 1
         """
 
@@ -446,7 +444,10 @@ def novo_usuario():
     if categoria != "membro":
         return render_template(
             "novo_usuario.html",
-            erro="Cadastros administrativos devem ser criados pela área de administradores.",
+            erro=(
+                "Cadastros administrativos devem ser criados "
+                "pela área de administradores."
+            ),
             nome=nome,
             categoria="membro"
         )
@@ -455,14 +456,6 @@ def novo_usuario():
         return render_template(
             "novo_usuario.html",
             erro="Informe o nome do usuário.",
-            nome=nome,
-            categoria=categoria
-        )
-
-    if categoria not in ["membro", "administrador"]:
-        return render_template(
-            "novo_usuario.html",
-            erro="Selecione uma categoria válida.",
             nome=nome,
             categoria=categoria
         )
@@ -494,7 +487,7 @@ def novo_usuario():
 
             idface.definir_administrador(
                 id_idface,
-                categoria == "administrador"
+                False
             )
 
         cursor.execute(
@@ -595,8 +588,7 @@ def editar_usuario(id_usuario):
         if not usuario:
             return redirect(url_for("usuarios"))
 
-        # Contas que já são administrativas continuam sendo
-        # gerenciadas pela área específica de administradores.
+        # Administradores devem ser gerenciados na área própria.
         if usuario["categoria"] == "administrador":
             return redirect(url_for("administradores"))
 
@@ -638,8 +630,6 @@ def editar_usuario(id_usuario):
                 erro="Selecione uma categoria válida."
             )
 
-        # ADM pode editar os dados de membros, mas não pode
-        # promover ninguém nem alterar permissões administrativas.
         if categoria in ("administrador", "master") and not master_logado():
             return render_template(
                 "editar_usuario.html",
@@ -651,7 +641,6 @@ def editar_usuario(id_usuario):
                 erro="Somente um MASTER pode promover usuários."
             )
 
-        # Se for promover para ADM ou MASTER, exige as credenciais.
         if categoria in ("administrador", "master"):
 
             if not usuario_admin:
@@ -687,7 +676,6 @@ def editar_usuario(id_usuario):
                     erro="A senha deve possuir pelo menos 8 caracteres."
                 )
 
-            # Verifica se o login já pertence a outra conta.
             cursor.execute(
                 """
                 SELECT id
@@ -726,8 +714,11 @@ def editar_usuario(id_usuario):
         nome_anterior = usuario["nome"]
         id_idface = usuario["id_idface"]
 
-        # A tabela usuarios aceita somente membro ou administrador.
-        # A distinção entre ADM e MASTER fica na tabela administradores.
+        # Guarda a permissão anterior para restaurá-la em caso de falha.
+        era_administrador_no_idface = (
+            usuario["categoria"] == "administrador"
+        )
+
         categoria_banco = (
             "membro"
             if categoria == "membro"
@@ -743,8 +734,7 @@ def editar_usuario(id_usuario):
         id_administrador_existente = usuario.get("id_administrador")
 
         try:
-            # Atualiza primeiro o equipamento.
-            # ADM e MASTER possuem permissão administrativa no iDFace.
+            # Atualiza o equipamento antes de confirmar no MySQL.
             with IDFaceClient() as idface:
                 idface.editar_usuario(
                     id_idface,
@@ -756,7 +746,6 @@ def editar_usuario(id_usuario):
                     categoria_banco == "administrador"
                 )
 
-            # Atualiza a identidade original no MySQL.
             cursor.execute(
                 """
                 UPDATE usuarios
@@ -774,8 +763,6 @@ def editar_usuario(id_usuario):
 
                 if id_administrador_existente:
 
-                    # Reaproveita o registro administrativo existente,
-                    # inclusive se estiver inativo.
                     cursor.execute(
                         """
                         UPDATE administradores
@@ -797,7 +784,6 @@ def editar_usuario(id_usuario):
 
                 else:
 
-                    # Cria o acesso ao painel vinculado ao mesmo usuário.
                     cursor.execute(
                         """
                         INSERT INTO administradores
@@ -822,8 +808,8 @@ def editar_usuario(id_usuario):
 
             else:
 
-                # Se houver um registro administrativo antigo,
-                # desativa o acesso ao painel sem apagar o cadastro.
+                # Rebaixamento: perde o painel, mas continua
+                # ativo como membro e com acesso físico.
                 if id_administrador_existente:
                     cursor.execute(
                         """
@@ -851,7 +837,7 @@ def editar_usuario(id_usuario):
 
             print(f"Erro ao atualizar usuário: {erro}")
 
-            # Tenta restaurar o equipamento para a situação anterior.
+            # Restaura os dados e a permissão que existiam antes.
             try:
                 with IDFaceClient() as idface:
                     idface.editar_usuario(
@@ -861,7 +847,7 @@ def editar_usuario(id_usuario):
 
                     idface.definir_administrador(
                         id_idface,
-                        False
+                        era_administrador_no_idface
                     )
 
             except IDFaceError as erro_compensacao:
@@ -923,6 +909,7 @@ def excluir_usuario(id_usuario):
             FROM usuarios
             WHERE id = %s
               AND ativo = 1
+            FOR UPDATE
             """,
             (id_usuario,)
         )
@@ -932,8 +919,6 @@ def excluir_usuario(id_usuario):
         if not usuario:
             return redirect(url_for("usuarios"))
 
-        # Administradores devem ser gerenciados pela
-        # área específica de administradores.
         if usuario["categoria"] == "administrador":
             print(
                 "Exclusão bloqueada: o cadastro pertence "
@@ -941,15 +926,12 @@ def excluir_usuario(id_usuario):
             )
             return redirect(url_for("usuarios"))
 
-        # Primeiro remove o usuário do iDFace.
         if usuario["id_idface"] is not None:
             with IDFaceClient() as idface:
                 idface.excluir_usuario(
                     usuario["id_idface"]
                 )
 
-        # Preserva o cadastro no MySQL para manter
-        # o vínculo com o histórico de acessos.
         cursor.execute(
             """
             UPDATE usuarios
@@ -1202,7 +1184,10 @@ def novo_administrador():
 
         return render_template(
             "novo_administrador.html",
-            erro="Não foi possível concluir o cadastro. Verifique se o nome de usuário já está em uso.",
+            erro=(
+                "Não foi possível concluir o cadastro. "
+                "Verifique se o nome de usuário já está em uso."
+            ),
             nome=nome,
             usuario=usuario
         )
@@ -1411,6 +1396,7 @@ def alterar_status_administrador(id_administrador):
         return resposta_bloqueio
 
     if id_administrador == session.get("admin_id"):
+        print("Alteração de status bloqueada: tentativa na própria conta.")
         return redirect(url_for("administradores"))
 
     conexao = None
@@ -1425,6 +1411,7 @@ def alterar_status_administrador(id_administrador):
             SELECT id, ativo
             FROM administradores
             WHERE id = %s
+            FOR UPDATE
             """,
             (id_administrador,)
         )
@@ -1440,6 +1427,11 @@ def alterar_status_administrador(id_administrador):
             total_ativos = contar_administradores_ativos(cursor)
 
             if total_ativos <= 1:
+                print(
+                    "Alteração bloqueada: não é permitido "
+                    "desativar o último administrador ativo."
+                )
+                conexao.rollback()
                 return redirect(url_for("administradores"))
 
         cursor.execute(
@@ -1490,7 +1482,11 @@ def excluir_administrador(id_administrador):
     if resposta_bloqueio:
         return resposta_bloqueio
 
+    # Impede que o MASTER exclua a própria conta.
     if id_administrador == session.get("admin_id"):
+        print(
+            "Exclusão bloqueada: tentativa de autoexclusão."
+        )
         return redirect(url_for("administradores"))
 
     conexao = None
@@ -1500,11 +1496,31 @@ def excluir_administrador(id_administrador):
         conexao = conectar_banco()
         cursor = conexao.cursor(dictionary=True)
 
+        # Bloqueia os registros administrativos para evitar
+        # alterações concorrentes durante a exclusão.
         cursor.execute(
             """
-            SELECT id, nome, ativo
+            SELECT id, ativo
             FROM administradores
-            WHERE id = %s
+            FOR UPDATE
+            """
+        )
+
+        administradores_bloqueados = cursor.fetchall()
+
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.id_usuario,
+                a.nome,
+                a.ativo,
+                u.id_idface
+            FROM administradores a
+            INNER JOIN usuarios u
+                ON u.id = a.id_usuario
+            WHERE a.id = %s
+            FOR UPDATE
             """,
             (id_administrador,)
         )
@@ -1512,31 +1528,122 @@ def excluir_administrador(id_administrador):
         administrador = cursor.fetchone()
 
         if not administrador:
+            conexao.rollback()
+            print("Exclusão cancelada: administrador não encontrado.")
             return redirect(url_for("administradores"))
 
+        # Impede excluir o último administrador ativo.
+        # Administradores já inativos podem ser excluídos.
         if administrador["ativo"]:
-            total_ativos = contar_administradores_ativos(cursor)
+            total_ativos = sum(
+                1
+                for admin in administradores_bloqueados
+                if admin["ativo"]
+            )
 
             if total_ativos <= 1:
+                conexao.rollback()
+
+                print(
+                    "Exclusão bloqueada: não é permitido "
+                    "excluir o último administrador ativo."
+                )
+
                 return redirect(url_for("administradores"))
 
+        id_usuario = administrador["id_usuario"]
+        id_idface = administrador["id_idface"]
+        nome = administrador["nome"]
+
+        # 1. Desativa integralmente o cadastro do usuário.
+        # O cadastro histórico permanece no banco.
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET categoria = 'membro',
+                ativo = 0
+            WHERE id = %s
+            """,
+            (id_usuario,)
+        )
+
+        if cursor.rowcount == 0:
+            conexao.rollback()
+
+            print(
+                "Exclusão cancelada: cadastro correspondente "
+                "não foi localizado na tabela usuarios."
+            )
+
+            return redirect(url_for("administradores"))
+
+        # 2. Remove a conta administrativa.
+        # Isso impede o acesso ao painel.
         cursor.execute(
             """
             DELETE FROM administradores
             WHERE id = %s
+              AND id_usuario = %s
             """,
-            (id_administrador,)
+            (id_administrador, id_usuario)
         )
 
+        if cursor.rowcount == 0:
+            conexao.rollback()
+
+            print(
+                "Exclusão cancelada: não foi possível remover "
+                "o registro administrativo."
+            )
+
+            return redirect(url_for("administradores"))
+
+        # 3. Confirma as alterações no MySQL.
+        # Os registros de acesso e o histórico de IDs não são apagados.
         conexao.commit()
 
         print(
-            f"Administrador excluído: {administrador['nome']}"
+            f"Administrador excluído integralmente: {nome} | "
+            f"MySQL: {id_usuario} | "
+            "Categoria: membro | "
+            "Ativo: 0 | "
+            "Conta administrativa removida | "
+            "Histórico preservado."
         )
+
+        # 4. Tenta remover a identificação física do iDFace.
+        # Se o equipamento estiver indisponível, a sincronização
+        # automática deverá remover a identidade posteriormente.
+        if id_idface is not None:
+
+            try:
+                with IDFaceClient() as idface:
+                    idface.excluir_usuario(id_idface)
+
+                print(
+                    f"Identificação removida do iDFace: {id_idface}"
+                )
+
+            except IDFaceError as erro_idface:
+                print(
+                    "ATENÇÃO: a conta foi excluída do MySQL, "
+                    "mas não foi possível remover a identificação "
+                    "do iDFace neste momento. "
+                    "A sincronização automática deverá tentar "
+                    "removê-la posteriormente. "
+                    f"Erro: {erro_idface}"
+                )
+
+        else:
+            print(
+                "ATENÇÃO: o administrador não possuía ID associado "
+                "ao iDFace. O cadastro foi inativado no MySQL."
+            )
 
         return redirect(url_for("administradores"))
 
     except mysql.connector.Error as erro:
+
         if conexao:
             conexao.rollback()
 
