@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Editar Administrador{% endblock %}
@@ -19,7 +18,6 @@
 </header>
 
 <section class="admin-form-container">
-
     <div class="admin-form-heading">
         <h3>Dados do administrador</h3>
         <p>Altere as informações necessárias.</p>
@@ -34,15 +32,9 @@
         action="{{ url_for('editar_administrador', id_administrador=administrador.id) }}"
         class="admin-form"
     >
-
         <div class="admin-form-field">
             <label for="id">ID do administrador</label>
-            <input
-                type="text"
-                id="id"
-                value="{{ administrador.id }}"
-                disabled
-            >
+            <input type="text" id="id" value="{{ administrador.id }}" disabled>
         </div>
 
         <div class="admin-form-field">
@@ -107,9 +99,7 @@
                 Cancelar
             </a>
         </div>
-
     </form>
-
 </section>
 
 {% endblock %}

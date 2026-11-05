@@ -12,22 +12,35 @@ def iniciar_servidor():
     print("Intervalo: 20 segundos\n")
 
     while True:
-        try:
-            print("\n--- Nova sincronizacao ---")
+        print("\n--- Nova sincronizacao ---")
 
-            # Abre uma unica sessao HTTPS para todo o ciclo.
+        try:
             with IDFaceClient() as idface:
 
-                sincronizar_usuarios(idface)
-                sincronizar_logs(idface)
+                # Sincronizacao de usuarios
+                try:
+                    print("\n=== SINCRONIZACAO DE USUARIOS ===")
+                    resultado_usuarios = sincronizar_usuarios(idface)
+                    print("Resultado usuarios:", resultado_usuarios)
 
-            # A sessao e encerrada automaticamente aqui.
+                except Exception as erro:
+                    print(f"Erro na sincronizacao de usuarios: {erro}")
+
+                # Sincronizacao de registros de acesso
+                try:
+                    print("\n=== SINCRONIZACAO DE REGISTROS ===")
+                    resultado_logs = sincronizar_logs(idface)
+                    print("Resultado registros:", resultado_logs)
+
+                except Exception as erro:
+                    print(f"Erro na sincronizacao de registros: {erro}")
+
             print("\nSessao do iDFace encerrada.")
-            print("Proxima sincronizacao em 20 segundos...")
 
         except Exception as erro:
-            print(f"Erro no servidor: {erro}")
+            print(f"Erro ao conectar ou manter sessao com iDFace: {erro}")
 
+        print("Proxima sincronizacao em 20 segundos...")
         time.sleep(20)
 
 

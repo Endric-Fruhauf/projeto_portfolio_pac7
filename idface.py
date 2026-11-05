@@ -1,5 +1,6 @@
 
 import os
+import base64
 import requests
 import config
 
@@ -10,11 +11,10 @@ class IDFaceError(Exception):
 
 
 class IDFaceClient:
+
     def __init__(self):
         self.base_url = f"https://{config.IDFACE_IP}"
 
-        # Caminho absoluto do certificado, independente
-        # do diretório em que o servidor for iniciado.
         diretorio_projeto = os.path.dirname(os.path.abspath(__file__))
 
         self.certificado = os.path.join(
@@ -104,6 +104,9 @@ class IDFaceClient:
 
             return resultado
 
+        except IDFaceError:
+            raise
+
         except requests.exceptions.SSLError as erro:
             raise IDFaceError(
                 f"Falha na validação SSL durante {endpoint}: {erro}"
@@ -127,7 +130,127 @@ class IDFaceClient:
 
         return resultado.get("users", [])
 
+    def consultar_privilegios(self):
+        resultado = self.requisicao(
+            "load_objects.fcgi",
+            {"object": "user_roles"}
+        )
+
+        return resultado.get("user_roles", [])
+
+    def consultar_fotos_usuarios(self, ids_usuarios):
+        """
+        Consulta fotos faciais de até 100 usuários por requisição.
+        Retorna os dados em Base64 e o timestamp de cada foto.
+        """
+
+        if not self.session:
+            raise IDFaceError("Não existe uma sessão ativa.")
+
+        if not ids_usuarios:
+            return []
+
+        try:
+            resposta = requests.post(
+                f"{self.base_url}/user_get_image_list.fcgi",
+                params={"session": self.session},
+                json={"user_ids": ids_usuarios},
+                verify=self.certificado,
+                timeout=30
+            )
+
+            resposta.raise_for_status()
+
+            resultado = resposta.json()
+
+            if "error" in resultado:
+                raise IDFaceError(str(resultado["error"]))
+
+            return resultado.get("user_images", [])
+
+        except IDFaceError:
+            raise
+
+        except requests.exceptions.SSLError as erro:
+            raise IDFaceError(
+                f"Falha na validação SSL ao consultar fotos: {erro}"
+            )
+
+        except requests.exceptions.RequestException as erro:
+            raise IDFaceError(
+                f"Erro ao consultar fotos faciais: {erro}"
+            )
+
+        except ValueError:
+            raise IDFaceError(
+                "Resposta inválida ao consultar fotos faciais."
+            )
+
+    def restaurar_foto_usuario(
+        self,
+        id_idface,
+        timestamp,
+        imagem_base64
+    ):
+        """
+        Restaura a foto facial de um usuário já cadastrado.
+        A imagem é enviada em binário, conforme a API Control iD.
+        """
+
+        if not self.session:
+            raise IDFaceError("Não existe uma sessão ativa.")
+
+        if not imagem_base64:
+            raise IDFaceError("A cópia da foto facial está vazia.")
+
+        try:
+            imagem_bytes = base64.b64decode(
+                imagem_base64,
+                validate=True
+            )
+
+            if not imagem_bytes:
+                raise IDFaceError("A imagem facial está vazia.")
+
+            resposta = requests.post(
+                f"{self.base_url}/user_set_image.fcgi",
+                params={
+                    "session": self.session,
+                    "user_id": int(id_idface),
+                    "timestamp": int(timestamp),
+                    "match": 0
+                },
+                data=imagem_bytes,
+                headers={
+                    "Content-Type": "application/octet-stream"
+                },
+                verify=self.certificado,
+                timeout=30
+            )
+
+            resposta.raise_for_status()
+
+            return True
+
+        except IDFaceError:
+            raise
+
+        except (ValueError, TypeError) as erro:
+            raise IDFaceError(
+                f"A cópia da foto facial está inválida: {erro}"
+            )
+
+        except requests.exceptions.RequestException as erro:
+            raise IDFaceError(
+                f"Erro ao restaurar foto facial: {erro}"
+            )
+
     def cadastrar_usuario(self, usuario_id, nome):
+        """
+        Cria no iDFace um usuário previamente cadastrado no MySQL.
+        A matrícula interna permite recuperar o vínculo posteriormente.
+        """
+
         matricula_interna = f"WBZ{usuario_id:06d}"
 
         resultado = self.requisicao(
@@ -150,7 +273,7 @@ class IDFaceClient:
                 "O iDFace não retornou o ID do usuário cadastrado."
             )
 
-        return ids[0]
+        return int(ids[0])
 
     def editar_usuario(self, id_idface, nome):
         resultado = self.requisicao(
@@ -168,16 +291,30 @@ class IDFaceClient:
             )
 
     def definir_administrador(self, id_idface, administrador):
-        # Remove os vínculos de permissões anteriores.
-        self.requisicao(
-            "destroy_objects.fcgi",
-            {
-                "object": "user_roles",
-                "where": {"user_roles": {"user_id": id_idface}}
-            }
+        """
+        Define a permissão administrativa no iDFace.
+
+        O equipamento possui somente dois níveis relevantes:
+        usuário normal e administrador.
+
+        ADM e MASTER recebem o mesmo papel no equipamento.
+        A distinção entre eles permanece no MySQL.
+        """
+
+        privilegios = self.consultar_privilegios()
+
+        possui_role_administrativa = any(
+            int(privilegio.get("user_id", -1)) == int(id_idface)
+            and int(privilegio.get("role", 0)) == 1
+            for privilegio in privilegios
         )
 
-        # Adiciona a permissão de administrador quando necessário.
+        if administrador and possui_role_administrativa:
+            return
+
+        if not administrador and not possui_role_administrativa:
+            return
+
         if administrador:
             self.requisicao(
                 "create_objects.fcgi",
@@ -192,8 +329,26 @@ class IDFaceClient:
                 }
             )
 
+        else:
+            self.requisicao(
+                "destroy_objects.fcgi",
+                {
+                    "object": "user_roles",
+                    "where": {
+                        "user_roles": {
+                            "user_id": id_idface,
+                            "role": 1
+                        }
+                    }
+                }
+            )
+
     def excluir_usuario(self, id_idface):
-        # Remove primeiro os vínculos de permissões.
+        """
+        Remove os privilégios e o cadastro do usuário no iDFace.
+        Não altera registros ou históricos do MySQL.
+        """
+
         self.requisicao(
             "destroy_objects.fcgi",
             {
@@ -202,7 +357,6 @@ class IDFaceClient:
             }
         )
 
-        # Exclui o usuário do equipamento.
         resultado = self.requisicao(
             "destroy_objects.fcgi",
             {

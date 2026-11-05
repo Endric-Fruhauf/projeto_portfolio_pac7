@@ -127,6 +127,25 @@ def administrador_logado():
     return "admin_id" in session
 
 
+def perfil_logado():
+    return session.get("admin_perfil", "administrador")
+
+
+def master_logado():
+    return administrador_logado() and perfil_logado() == "master"
+
+
+def bloquear_se_nao_master():
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    if not master_logado():
+        print("Acesso negado: operação exclusiva para MASTER.")
+        return redirect(url_for("painel"))
+
+    return None
+
+
 def contar_administradores_ativos(cursor):
     cursor.execute(
         """
@@ -176,7 +195,7 @@ def login():
 
             cursor.execute(
                 """
-                SELECT id, nome, usuario, senha_hash
+                SELECT id, id_usuario, nome, usuario, senha_hash, perfil
                 FROM administradores
                 WHERE usuario = %s AND ativo = TRUE
                 """,
@@ -193,7 +212,9 @@ def login():
                 session.clear()
                 session.permanent = True
                 session["admin_id"] = administrador["id"]
+                session["admin_usuario_id"] = administrador["id_usuario"]
                 session["admin_nome"] = administrador["nome"]
+                session["admin_perfil"] = administrador["perfil"] or "administrador"
 
                 return redirect(url_for("painel"))
 
@@ -263,10 +284,18 @@ def usuarios():
 
         cursor.execute(
             """
-            SELECT id, nome, categoria, id_idface
-            FROM usuarios
-            WHERE ativo = 1
-            ORDER BY nome ASC
+            SELECT
+                u.id,
+                u.nome,
+                u.categoria,
+                u.id_idface,
+                a.id AS id_administrador,
+                a.perfil AS perfil_administrativo
+            FROM usuarios u
+            LEFT JOIN administradores a
+                ON a.id_usuario = u.id
+            WHERE u.ativo = 1
+            ORDER BY u.nome ASC
             """
         )
 
@@ -274,7 +303,9 @@ def usuarios():
 
         return render_template(
             "usuarios.html",
-            usuarios=lista_usuarios
+            usuarios=lista_usuarios,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
         )
 
     except mysql.connector.Error as erro:
@@ -283,6 +314,8 @@ def usuarios():
         return render_template(
             "usuarios.html",
             usuarios=[],
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado(),
             erro="Não foi possível carregar os usuários."
         )
 
@@ -408,7 +441,15 @@ def novo_usuario():
         )
 
     nome = request.form.get("nome", "").strip()
-    categoria = request.form.get("categoria", "").strip()
+    categoria = request.form.get("categoria", "membro").strip()
+
+    if categoria != "membro":
+        return render_template(
+            "novo_usuario.html",
+            erro="Cadastros administrativos devem ser criados pela área de administradores.",
+            nome=nome,
+            categoria="membro"
+        )
 
     if not nome:
         return render_template(
@@ -531,47 +572,151 @@ def editar_usuario(id_usuario):
 
         cursor.execute(
             """
-            SELECT id, nome, categoria, id_idface
-            FROM usuarios
-            WHERE id = %s
-              AND ativo = 1
+            SELECT
+                u.id,
+                u.nome,
+                u.categoria,
+                u.id_idface,
+                a.id AS id_administrador,
+                a.usuario AS usuario_admin,
+                a.perfil AS perfil_administrativo,
+                a.ativo AS administrador_ativo
+            FROM usuarios u
+            LEFT JOIN administradores a
+                ON a.id_usuario = u.id
+            WHERE u.id = %s
+              AND u.ativo = 1
             """,
             (id_usuario,)
         )
 
         usuario = cursor.fetchone()
 
-        # Cadastros históricos não podem ser editados.
         if not usuario:
             return redirect(url_for("usuarios"))
+
+        # Contas que já são administrativas continuam sendo
+        # gerenciadas pela área específica de administradores.
+        if usuario["categoria"] == "administrador":
+            return redirect(url_for("administradores"))
 
         if request.method == "GET":
             return render_template(
                 "editar_usuario.html",
-                usuario=usuario
+                usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario.get("usuario_admin"),
+                categoria_selecionada=None
             )
 
         nome = request.form.get("nome", "").strip()
         categoria = request.form.get("categoria", "").strip()
 
+        usuario_admin = request.form.get("usuario_admin", "").strip()
+        senha_admin = request.form.get("senha_admin", "")
+
         if not nome:
             return render_template(
                 "editar_usuario.html",
                 usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario_admin,
+                categoria_selecionada=categoria,
                 erro="Informe o nome do usuário."
             )
 
-        if categoria not in ["membro", "administrador"]:
+        if categoria not in ("membro", "administrador", "master"):
             return render_template(
                 "editar_usuario.html",
                 usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario_admin,
+                categoria_selecionada=categoria,
                 erro="Selecione uma categoria válida."
             )
+
+        # ADM pode editar os dados de membros, mas não pode
+        # promover ninguém nem alterar permissões administrativas.
+        if categoria in ("administrador", "master") and not master_logado():
+            return render_template(
+                "editar_usuario.html",
+                usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario_admin,
+                categoria_selecionada="membro",
+                erro="Somente um MASTER pode promover usuários."
+            )
+
+        # Se for promover para ADM ou MASTER, exige as credenciais.
+        if categoria in ("administrador", "master"):
+
+            if not usuario_admin:
+                return render_template(
+                    "editar_usuario.html",
+                    usuario=usuario,
+                    perfil_logado=perfil_logado(),
+                    master_logado=master_logado(),
+                    usuario_admin=usuario_admin,
+                    categoria_selecionada=categoria,
+                    erro="Informe o nome de usuário para acesso ao painel."
+                )
+
+            if not senha_admin:
+                return render_template(
+                    "editar_usuario.html",
+                    usuario=usuario,
+                    perfil_logado=perfil_logado(),
+                    master_logado=master_logado(),
+                    usuario_admin=usuario_admin,
+                    categoria_selecionada=categoria,
+                    erro="Informe uma senha para acesso ao painel."
+                )
+
+            if len(senha_admin) < 8:
+                return render_template(
+                    "editar_usuario.html",
+                    usuario=usuario,
+                    perfil_logado=perfil_logado(),
+                    master_logado=master_logado(),
+                    usuario_admin=usuario_admin,
+                    categoria_selecionada=categoria,
+                    erro="A senha deve possuir pelo menos 8 caracteres."
+                )
+
+            # Verifica se o login já pertence a outra conta.
+            cursor.execute(
+                """
+                SELECT id
+                FROM administradores
+                WHERE usuario = %s
+                  AND id_usuario <> %s
+                """,
+                (usuario_admin, id_usuario)
+            )
+
+            if cursor.fetchone():
+                return render_template(
+                    "editar_usuario.html",
+                    usuario=usuario,
+                    perfil_logado=perfil_logado(),
+                    master_logado=master_logado(),
+                    usuario_admin=usuario_admin,
+                    categoria_selecionada=categoria,
+                    erro="Esse nome de usuário já está sendo utilizado."
+                )
 
         if usuario["id_idface"] is None:
             return render_template(
                 "editar_usuario.html",
                 usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario_admin,
+                categoria_selecionada=categoria,
                 erro=(
                     "Este usuário ainda não está associado ao iDFace. "
                     "A edição está bloqueada até regularizarmos essa associação."
@@ -579,10 +724,27 @@ def editar_usuario(id_usuario):
             )
 
         nome_anterior = usuario["nome"]
-        categoria_anterior = usuario["categoria"]
         id_idface = usuario["id_idface"]
 
+        # A tabela usuarios aceita somente membro ou administrador.
+        # A distinção entre ADM e MASTER fica na tabela administradores.
+        categoria_banco = (
+            "membro"
+            if categoria == "membro"
+            else "administrador"
+        )
+
+        perfil_administrativo = (
+            "master"
+            if categoria == "master"
+            else "administrador"
+        )
+
+        id_administrador_existente = usuario.get("id_administrador")
+
         try:
+            # Atualiza primeiro o equipamento.
+            # ADM e MASTER possuem permissão administrativa no iDFace.
             with IDFaceClient() as idface:
                 idface.editar_usuario(
                     id_idface,
@@ -591,23 +753,92 @@ def editar_usuario(id_usuario):
 
                 idface.definir_administrador(
                     id_idface,
-                    categoria == "administrador"
+                    categoria_banco == "administrador"
                 )
 
+            # Atualiza a identidade original no MySQL.
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET nome = %s, categoria = %s
+                SET nome = %s,
+                    categoria = %s
                 WHERE id = %s
                   AND ativo = 1
                 """,
-                (nome, categoria, id_usuario)
+                (nome, categoria_banco, id_usuario)
             )
+
+            if categoria_banco == "administrador":
+
+                senha_hash = generate_password_hash(senha_admin)
+
+                if id_administrador_existente:
+
+                    # Reaproveita o registro administrativo existente,
+                    # inclusive se estiver inativo.
+                    cursor.execute(
+                        """
+                        UPDATE administradores
+                        SET nome = %s,
+                            usuario = %s,
+                            senha_hash = %s,
+                            perfil = %s,
+                            ativo = TRUE
+                        WHERE id = %s
+                        """,
+                        (
+                            nome,
+                            usuario_admin,
+                            senha_hash,
+                            perfil_administrativo,
+                            id_administrador_existente
+                        )
+                    )
+
+                else:
+
+                    # Cria o acesso ao painel vinculado ao mesmo usuário.
+                    cursor.execute(
+                        """
+                        INSERT INTO administradores
+                            (
+                                id_usuario,
+                                nome,
+                                usuario,
+                                senha_hash,
+                                perfil,
+                                ativo
+                            )
+                        VALUES (%s, %s, %s, %s, %s, TRUE)
+                        """,
+                        (
+                            id_usuario,
+                            nome,
+                            usuario_admin,
+                            senha_hash,
+                            perfil_administrativo
+                        )
+                    )
+
+            else:
+
+                # Se houver um registro administrativo antigo,
+                # desativa o acesso ao painel sem apagar o cadastro.
+                if id_administrador_existente:
+                    cursor.execute(
+                        """
+                        UPDATE administradores
+                        SET ativo = FALSE
+                        WHERE id = %s
+                        """,
+                        (id_administrador_existente,)
+                    )
 
             conexao.commit()
 
             print(
                 f"Usuário atualizado: {nome} | "
+                f"Categoria: {categoria} | "
                 f"MySQL: {id_usuario} | "
                 f"iDFace: {id_idface}"
             )
@@ -620,6 +851,7 @@ def editar_usuario(id_usuario):
 
             print(f"Erro ao atualizar usuário: {erro}")
 
+            # Tenta restaurar o equipamento para a situação anterior.
             try:
                 with IDFaceClient() as idface:
                     idface.editar_usuario(
@@ -629,7 +861,7 @@ def editar_usuario(id_usuario):
 
                     idface.definir_administrador(
                         id_idface,
-                        categoria_anterior == "administrador"
+                        False
                     )
 
             except IDFaceError as erro_compensacao:
@@ -640,14 +872,17 @@ def editar_usuario(id_usuario):
                 )
 
             usuario["nome"] = nome
-            usuario["categoria"] = categoria
 
             return render_template(
                 "editar_usuario.html",
                 usuario=usuario,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
+                usuario_admin=usuario_admin,
+                categoria_selecionada=categoria,
                 erro=(
                     "Não foi possível concluir a atualização. "
-                    "Verifique o equipamento e o banco de dados."
+                    "Verifique a comunicação com o iDFace e o banco de dados."
                 )
             )
 
@@ -789,8 +1024,10 @@ def administradores():
             """
             SELECT
                 id,
+                id_usuario,
                 nome,
                 usuario,
+                perfil,
                 ativo,
                 data_cadastro
             FROM administradores
@@ -802,7 +1039,9 @@ def administradores():
 
         return render_template(
             "administradores.html",
-            administradores=lista_administradores
+            administradores=lista_administradores,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
         )
 
     except mysql.connector.Error as erro:
@@ -811,6 +1050,8 @@ def administradores():
         return render_template(
             "administradores.html",
             administradores=[],
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado(),
             erro="Não foi possível carregar os administradores."
         )
 
@@ -829,23 +1070,30 @@ def administradores():
 @app.route("/administradores/novo", methods=["GET", "POST"])
 def novo_administrador():
 
-    if not administrador_logado():
-        return redirect(url_for("login"))
+    resposta_bloqueio = bloquear_se_nao_master()
+    if resposta_bloqueio:
+        return resposta_bloqueio
 
     if request.method == "GET":
-        return render_template("novo_administrador.html")
+        return render_template(
+            "novo_administrador.html",
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
+        )
 
     nome = request.form.get("nome", "").strip()
     usuario = request.form.get("usuario", "").strip()
     senha = request.form.get("senha", "")
     confirmar_senha = request.form.get("confirmar_senha", "")
 
-    if not nome or not usuario or not senha:
+    if not nome or not usuario or not senha or not confirmar_senha:
         return render_template(
             "novo_administrador.html",
             erro="Preencha todos os campos.",
             nome=nome,
-            usuario=usuario
+            usuario=usuario,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
         )
 
     if len(senha) < 8:
@@ -853,7 +1101,9 @@ def novo_administrador():
             "novo_administrador.html",
             erro="A senha deve possuir pelo menos 8 caracteres.",
             nome=nome,
-            usuario=usuario
+            usuario=usuario,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
         )
 
     if senha != confirmar_senha:
@@ -861,30 +1111,75 @@ def novo_administrador():
             "novo_administrador.html",
             erro="As senhas informadas não coincidem.",
             nome=nome,
-            usuario=usuario
+            usuario=usuario,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado()
         )
 
     conexao = None
     cursor = None
+    id_usuario = None
+    id_idface = None
 
     try:
         conexao = conectar_banco()
         cursor = conexao.cursor()
+
+        cursor.execute(
+            "SELECT id FROM administradores WHERE usuario = %s",
+            (usuario,)
+        )
+
+        if cursor.fetchone():
+            return render_template(
+                "novo_administrador.html",
+                erro="Esse nome de usuário já está sendo utilizado.",
+                nome=nome,
+                usuario=usuario
+            )
+
+        cursor.execute(
+            """
+            INSERT INTO usuarios (nome, categoria)
+            VALUES (%s, 'administrador')
+            """,
+            (nome,)
+        )
+
+        id_usuario = cursor.lastrowid
+
+        with IDFaceClient() as idface:
+            id_idface = idface.cadastrar_usuario(id_usuario, nome)
+            idface.definir_administrador(id_idface, True)
+
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET id_idface = %s
+            WHERE id = %s
+            """,
+            (id_idface, id_usuario)
+        )
 
         senha_hash = generate_password_hash(senha)
 
         cursor.execute(
             """
             INSERT INTO administradores
-                (nome, usuario, senha_hash, ativo)
-            VALUES (%s, %s, %s, TRUE)
+                (id_usuario, nome, usuario, senha_hash, perfil, ativo)
+            VALUES (%s, %s, %s, %s, 'administrador', TRUE)
             """,
-            (nome, usuario, senha_hash)
+            (id_usuario, nome, usuario, senha_hash)
         )
 
         conexao.commit()
 
-        print(f"Administrador cadastrado: {usuario}")
+        print(
+            f"Administrador cadastrado: {nome} | "
+            f"Usuário: {usuario} | "
+            f"MySQL: {id_usuario} | "
+            f"iDFace: {id_idface}"
+        )
 
         return redirect(url_for("administradores"))
 
@@ -892,24 +1187,49 @@ def novo_administrador():
         if conexao:
             conexao.rollback()
 
+        if id_idface is not None:
+            try:
+                with IDFaceClient() as idface:
+                    idface.excluir_usuario(id_idface)
+            except IDFaceError as erro_compensacao:
+                print(
+                    "ATENÇÃO: não foi possível remover o cadastro "
+                    "incompleto do iDFace:",
+                    erro_compensacao
+                )
+
         print(f"Erro de integridade ao cadastrar administrador: {erro}")
 
         return render_template(
             "novo_administrador.html",
-            erro="Esse nome de usuário já está sendo utilizado.",
+            erro="Não foi possível concluir o cadastro. Verifique se o nome de usuário já está em uso.",
             nome=nome,
             usuario=usuario
         )
 
-    except mysql.connector.Error as erro:
+    except (mysql.connector.Error, IDFaceError) as erro:
         if conexao:
             conexao.rollback()
+
+        if id_idface is not None:
+            try:
+                with IDFaceClient() as idface:
+                    idface.excluir_usuario(id_idface)
+            except IDFaceError as erro_compensacao:
+                print(
+                    "ATENÇÃO: não foi possível remover o cadastro "
+                    "incompleto do iDFace:",
+                    erro_compensacao
+                )
 
         print(f"Erro ao cadastrar administrador: {erro}")
 
         return render_template(
             "novo_administrador.html",
-            erro="Não foi possível cadastrar o administrador.",
+            erro=(
+                "Não foi possível concluir o cadastro. "
+                "Verifique a comunicação com o iDFace e o banco de dados."
+            ),
             nome=nome,
             usuario=usuario
         )
@@ -932,8 +1252,9 @@ def novo_administrador():
 )
 def editar_administrador(id_administrador):
 
-    if not administrador_logado():
-        return redirect(url_for("login"))
+    resposta_bloqueio = bloquear_se_nao_master()
+    if resposta_bloqueio:
+        return resposta_bloqueio
 
     conexao = None
     cursor = None
@@ -944,7 +1265,7 @@ def editar_administrador(id_administrador):
 
         cursor.execute(
             """
-            SELECT id, nome, usuario, ativo
+            SELECT id, id_usuario, nome, usuario, perfil, ativo
             FROM administradores
             WHERE id = %s
             """,
@@ -959,7 +1280,9 @@ def editar_administrador(id_administrador):
         if request.method == "GET":
             return render_template(
                 "editar_administrador.html",
-                administrador=administrador
+                administrador=administrador,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado()
             )
 
         nome = request.form.get("nome", "").strip()
@@ -971,6 +1294,8 @@ def editar_administrador(id_administrador):
             return render_template(
                 "editar_administrador.html",
                 administrador=administrador,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
                 erro="Nome e usuário são obrigatórios."
             )
 
@@ -978,6 +1303,8 @@ def editar_administrador(id_administrador):
             return render_template(
                 "editar_administrador.html",
                 administrador=administrador,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
                 erro="A nova senha deve possuir pelo menos 8 caracteres."
             )
 
@@ -985,6 +1312,8 @@ def editar_administrador(id_administrador):
             return render_template(
                 "editar_administrador.html",
                 administrador=administrador,
+                perfil_logado=perfil_logado(),
+                master_logado=master_logado(),
                 erro="As senhas informadas não coincidem."
             )
 
@@ -1013,6 +1342,15 @@ def editar_administrador(id_administrador):
                 (nome, usuario, id_administrador)
             )
 
+        cursor.execute(
+            """
+            UPDATE usuarios
+            SET nome = %s
+            WHERE id = %s
+            """,
+            (nome, administrador["id_usuario"])
+        )
+
         conexao.commit()
 
         if id_administrador == session.get("admin_id"):
@@ -1031,6 +1369,8 @@ def editar_administrador(id_administrador):
         return render_template(
             "editar_administrador.html",
             administrador=administrador,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado(),
             erro="Esse nome de usuário já está sendo utilizado."
         )
 
@@ -1043,6 +1383,8 @@ def editar_administrador(id_administrador):
         return render_template(
             "editar_administrador.html",
             administrador=administrador,
+            perfil_logado=perfil_logado(),
+            master_logado=master_logado(),
             erro="Não foi possível atualizar o administrador."
         )
 
@@ -1064,8 +1406,9 @@ def editar_administrador(id_administrador):
 )
 def alterar_status_administrador(id_administrador):
 
-    if not administrador_logado():
-        return redirect(url_for("login"))
+    resposta_bloqueio = bloquear_se_nao_master()
+    if resposta_bloqueio:
+        return resposta_bloqueio
 
     if id_administrador == session.get("admin_id"):
         return redirect(url_for("administradores"))
@@ -1143,8 +1486,9 @@ def alterar_status_administrador(id_administrador):
 )
 def excluir_administrador(id_administrador):
 
-    if not administrador_logado():
-        return redirect(url_for("login"))
+    resposta_bloqueio = bloquear_se_nao_master()
+    if resposta_bloqueio:
+        return resposta_bloqueio
 
     if id_administrador == session.get("admin_id"):
         return redirect(url_for("administradores"))

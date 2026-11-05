@@ -63,21 +63,66 @@
 
         <select id="categoria" name="categoria" required>
 
-            <option
-                value="membro"
+            <option value="membro"
                 {% if usuario.categoria == 'membro' %}selected{% endif %}
             >
                 Membro
             </option>
 
-            <option
-                value="administrador"
-                {% if usuario.categoria == 'administrador' %}selected{% endif %}
-            >
-                Administrador
-            </option>
+            {% if master_logado %}
+                <option value="administrador"
+                    {% if categoria_selecionada == 'administrador' or (not categoria_selecionada and usuario.categoria == 'administrador') %}selected{% endif %}
+                >
+                    ADM
+                </option>
+
+                <option value="master"
+                    {% if categoria_selecionada == 'master' %}selected{% endif %}
+                >
+                    MASTER
+                </option>
+            {% endif %}
 
         </select>
+
+        {% if master_logado %}
+        <div id="credenciais-administrativas" style="display: none;">
+
+            <h3>Credenciais de acesso ao painel</h3>
+
+            <p>
+                Defina o login e a senha que serão utilizados por este usuário
+                para acessar o painel administrativo.
+            </p>
+
+            <label for="usuario_admin">Nome de usuário</label>
+
+            <input
+                type="text"
+                id="usuario_admin"
+                name="usuario_admin"
+                value="{{ usuario_admin or '' }}"
+                maxlength="50"
+                autocomplete="username"
+            >
+
+            <label for="senha_admin">Senha</label>
+
+            <input
+                type="password"
+                id="senha_admin"
+                name="senha_admin"
+                maxlength="100"
+                autocomplete="new-password"
+                placeholder="Defina a senha de acesso"
+            >
+
+            <small>
+                A senha será armazenada utilizando hash de segurança.
+            </small>
+
+        </div>
+        {% endif %}
 
         <div class="edit-user-actions">
 
@@ -94,5 +139,37 @@
     </form>
 
 </section>
+
+{% if master_logado %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const categoria = document.getElementById("categoria");
+    const credenciais = document.getElementById("credenciais-administrativas");
+    const usuarioAdmin = document.getElementById("usuario_admin");
+    const senhaAdmin = document.getElementById("senha_admin");
+
+    function atualizarCredenciais() {
+
+        const precisaCredenciais =
+            categoria.value === "administrador" ||
+            categoria.value === "master";
+
+        credenciais.style.display = precisaCredenciais ? "block" : "none";
+
+        usuarioAdmin.required = precisaCredenciais;
+
+        // A senha será exigida na promoção.
+        // Ao editar um usuário que já possui credenciais, poderá ser mantida.
+        senhaAdmin.required = precisaCredenciais;
+    }
+
+    categoria.addEventListener("change", atualizarCredenciais);
+
+    atualizarCredenciais();
+
+});
+</script>
+{% endif %}
 
 {% endblock %}
