@@ -1,0 +1,238 @@
+
+/* =====================================
+   NOVO ADMINISTRADOR
+===================================== */
+
+.admins-page {
+    min-width: 0;
+    color: #e5e7eb;
+}
+
+.admins-page,
+.admins-page * {
+    box-sizing: border-box;
+}
+
+/* =====================================
+   CABEÇALHO DO FORMULÁRIO
+===================================== */
+
+.admin-form-container {
+    width: 100%;
+    max-width: 680px;
+    margin-top: 30px;
+    padding: 30px;
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 12px;
+}
+
+.admin-form-heading {
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #374151;
+}
+
+.admin-form-heading h3 {
+    margin: 0 0 8px;
+    color: #f9fafb;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.admin-form-heading p {
+    margin: 0;
+    color: #9ca3af;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* =====================================
+   FORMULÁRIO
+===================================== */
+
+.admin-form {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+.admin-form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-form-field label {
+    color: #d1d5db;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+}
+
+.admin-form-field input {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    height: 46px;
+    padding: 0 15px;
+
+    background-color: #111827;
+    border: 1px solid #4b5563;
+    border-radius: 8px;
+
+    color: #f9fafb;
+    font-family: inherit;
+    font-size: 14px;
+
+    outline: none;
+    box-shadow: none;
+
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease,
+        background-color 0.2s ease;
+}
+
+.admin-form-field input:hover {
+    border-color: #6b7280;
+}
+
+.admin-form-field input:focus {
+    background-color: #111827;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.admin-form-field input::placeholder {
+    color: #6b7280;
+    opacity: 1;
+}
+
+/* Evita fundo branco inesperado no preenchimento automático */
+
+.admin-form-field input:-webkit-autofill,
+.admin-form-field input:-webkit-autofill:hover,
+.admin-form-field input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #f9fafb;
+    -webkit-box-shadow: 0 0 0 1000px #111827 inset;
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+/* =====================================
+   BOTÕES
+===================================== */
+
+.admin-form-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.admin-btn-primary,
+.admin-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-height: 44px;
+    padding: 0 20px;
+
+    border: 1px solid transparent;
+    border-radius: 8px;
+
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+
+    cursor: pointer;
+
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.admin-btn-primary {
+    background-color: #2563eb;
+    color: #ffffff;
+}
+
+.admin-btn-primary:hover {
+    background-color: #1d4ed8;
+}
+
+.admin-btn-secondary {
+    background-color: #374151;
+    border-color: #4b5563;
+    color: #e5e7eb;
+}
+
+.admin-btn-secondary:hover {
+    background-color: #4b5563;
+}
+
+/* =====================================
+   MENSAGEM DE ERRO
+===================================== */
+
+.admin-message-error {
+    margin-bottom: 20px;
+    padding: 13px 15px;
+
+    background-color: #451a1a;
+    border: 1px solid #7f1d1d;
+    border-radius: 8px;
+
+    color: #fca5a5;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* =====================================
+   RESPONSIVIDADE
+===================================== */
+
+@media (max-width: 700px) {
+
+    .admin-form-container {
+        margin-top: 20px;
+        padding: 22px;
+    }
+
+    .admin-form {
+        gap: 19px;
+    }
+
+    .admin-form-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .admin-btn-primary,
+    .admin-btn-secondary {
+        width: 100%;
+    }
+
+}
+
+@media (max-width: 380px) {
+
+    .admin-form-container {
+        padding: 17px;
+    }
+
+    .admin-form-heading h3 {
+        font-size: 16px;
+    }
+
+    .admin-form-field input {
+        height: 44px;
+        font-size: 13px;
+    }
+
+}
