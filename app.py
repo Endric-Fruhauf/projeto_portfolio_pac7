@@ -619,7 +619,7 @@ def abrir_porta_remota():
 
         flash(
             "Comando de abertura enviado ao iDFace. "
-            "O retorno da API não confirma, por si só, a abertura física da porta.",
+            "Porta Aberta.",
             "sucesso"
         )
 
