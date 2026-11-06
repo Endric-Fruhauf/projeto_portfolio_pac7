@@ -1,5 +1,6 @@
 
 import re
+import unicodedata
 import mysql.connector
 import config
 
@@ -10,6 +11,15 @@ from idface import IDFaceError
 PERCENTUAL_MAXIMO_EXCLUSOES = 10
 LIMITE_MINIMO_EXCLUSOES = 2
 LIMITE_MAXIMO_EXCLUSOES = 5
+
+
+def _normalizar_nome_departamento(nome):
+    """Normaliza o nome para comparar PADRÃO sem diferença de acento."""
+    return "".join(
+        caractere
+        for caractere in unicodedata.normalize("NFKD", str(nome).casefold())
+        if not unicodedata.combining(caractere)
+    ).strip()
 
 
 def _calcular_limite_exclusoes(quantidade_usuarios_ativos):
@@ -393,6 +403,8 @@ def sincronizar_usuarios(idface):
         "excluidos": 0,
         "ignorados": 0,
         "exclusoes_desconhecidos_bloqueadas": 0,
+        "departamentos_verificados": 0,
+        "departamentos_com_falha": 0,
         "sucesso": False
     }
 
@@ -1077,7 +1089,132 @@ def sincronizar_usuarios(idface):
                 )
 
         # =====================================
-        # 11. SINCRONIZAR FOTOS FACIAIS
+        # 11. SINCRONIZAR DEPARTAMENTO PADRÃO
+        # =====================================
+
+        print("\n=== SINCRONIZACAO DE DEPARTAMENTOS ===")
+
+        usuarios_para_verificar = [
+            usuario
+            for usuario in usuarios_ativos
+            if (
+                usuario["id_idface"] is not None
+                and int(usuario["id_idface"]) in ids_presentes
+            )
+        ]
+
+        try:
+            departamentos = idface.consultar_departamentos()
+            vinculos_departamentos = (
+                idface.consultar_vinculos_departamentos()
+            )
+
+            if not isinstance(departamentos, list) or not all(
+                isinstance(item, dict) for item in departamentos
+            ):
+                raise IDFaceError(
+                    "O iDFace retornou uma lista de departamentos inválida."
+                )
+
+            if not isinstance(vinculos_departamentos, list) or not all(
+                isinstance(item, dict) for item in vinculos_departamentos
+            ):
+                raise IDFaceError(
+                    "O iDFace retornou uma lista de vínculos "
+                    "de departamentos inválida."
+                )
+
+            grupos_padrao = [
+                grupo
+                for grupo in departamentos
+                if _normalizar_nome_departamento(
+                    grupo.get("name", "")
+                ) == "padrao"
+            ]
+
+            if len(grupos_padrao) != 1:
+                raise IDFaceError(
+                    "Era esperado encontrar exatamente um departamento "
+                    "chamado PADRÃO no iDFace, mas foram encontrados "
+                    f"{len(grupos_padrao)}."
+                )
+
+            id_departamento_padrao = int(grupos_padrao[0]["id"])
+
+            usuarios_com_departamento = set()
+
+            for vinculo in vinculos_departamentos:
+                try:
+                    id_usuario_vinculo = int(vinculo["user_id"])
+                    id_departamento_vinculo = int(vinculo["group_id"])
+                except (KeyError, ValueError, TypeError):
+                    raise IDFaceError(
+                        "O iDFace retornou um vínculo de departamento "
+                        "com identificadores inválidos."
+                    )
+
+                if id_departamento_vinculo == id_departamento_padrao:
+                    usuarios_com_departamento.add(id_usuario_vinculo)
+
+            for usuario in usuarios_para_verificar:
+
+                id_idface = int(usuario["id_idface"])
+
+                if id_idface in usuarios_com_departamento:
+                    resultado_sync["departamentos_verificados"] += 1
+                    continue
+
+                try:
+                    idface.associar_departamento_padrao(id_idface)
+
+                    # Evita tentar criar novamente o mesmo vínculo
+                    # durante esta execução.
+                    usuarios_com_departamento.add(id_idface)
+
+                    resultado_sync["departamentos_verificados"] += 1
+
+                    print(
+                        f"Usuário associado ao departamento PADRÃO: "
+                        f"{usuario['nome']} | ID iDFace: {id_idface}"
+                    )
+
+                except IDFaceError as erro:
+                    resultado_sync["departamentos_com_falha"] += 1
+
+                    print(
+                        f"Falha ao associar departamento PADRÃO: "
+                        f"{usuario['nome']} | ID iDFace: {id_idface} | "
+                        f"Erro: {erro}"
+                    )
+
+                except Exception as erro:
+                    resultado_sync["departamentos_com_falha"] += 1
+
+                    print(
+                        f"Erro inesperado ao sincronizar departamento de "
+                        f"{usuario['nome']} | ID iDFace: {id_idface} | "
+                        f"Erro: {erro}"
+                    )
+
+        except (IDFaceError, KeyError, ValueError, TypeError) as erro:
+            quantidade_afetada = (
+                len(usuarios_para_verificar)
+                - resultado_sync["departamentos_verificados"]
+                - resultado_sync["departamentos_com_falha"]
+            )
+
+            resultado_sync["departamentos_com_falha"] += max(
+                quantidade_afetada,
+                0
+            )
+
+            print(
+                "Não foi possível consultar ou identificar o "
+                f"departamento PADRÃO: {erro}"
+            )
+
+        # =====================================
+        # 12. SINCRONIZAR FOTOS FACIAIS
         # =====================================
 
         contador_fotos = [0]
@@ -1109,6 +1246,14 @@ def sincronizar_usuarios(idface):
         print(
             "Exclusões de desconhecidos bloqueadas:",
             resultado_sync["exclusoes_desconhecidos_bloqueadas"]
+        )
+        print(
+            "Departamentos PADRÃO verificados:",
+            resultado_sync["departamentos_verificados"]
+        )
+        print(
+            "Falhas na sincronização de departamentos:",
+            resultado_sync["departamentos_com_falha"]
         )
         print("Sincronização concluída!")
 

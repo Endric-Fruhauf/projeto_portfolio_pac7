@@ -1,6 +1,7 @@
 
 import os
 import base64
+import unicodedata
 import requests
 import config
 
@@ -32,10 +33,7 @@ class IDFaceClient:
 
     @staticmethod
     def _validar_lista_resposta(resultado, campo, operacao):
-        """
-        Valida se a resposta contém o campo esperado
-        e se seu conteúdo é uma lista de objetos.
-        """
+        """Valida se a resposta contém uma lista de objetos."""
 
         if not isinstance(resultado, dict):
             raise IDFaceError(
@@ -51,8 +49,7 @@ class IDFaceClient:
 
         if not isinstance(dados, list):
             raise IDFaceError(
-                f"O campo '{campo}' retornado pelo iDFace "
-                f"não é uma lista válida durante {operacao}."
+                f"O campo '{campo}' não é uma lista válida durante {operacao}."
             )
 
         if not all(isinstance(item, dict) for item in dados):
@@ -64,9 +61,7 @@ class IDFaceClient:
 
     @staticmethod
     def _validar_lista_ids(resultado, campo, operacao):
-        """
-        Valida listas de IDs numéricos retornadas pelo iDFace.
-        """
+        """Valida listas de IDs numéricos retornadas pelo iDFace."""
 
         if not isinstance(resultado, dict):
             raise IDFaceError(
@@ -94,6 +89,18 @@ class IDFaceClient:
             )
 
         return ids
+
+    @staticmethod
+    def _normalizar_nome_departamento(nome):
+        """Normaliza nomes para comparação sem diferenças de acentuação."""
+
+        nome = str(nome or "").strip().casefold()
+
+        return "".join(
+            caractere
+            for caractere in unicodedata.normalize("NFD", nome)
+            if unicodedata.category(caractere) != "Mn"
+        )
 
     def conectar(self):
         try:
@@ -223,6 +230,140 @@ class IDFaceClient:
             "consulta de permissões"
         )
 
+    def consultar_departamentos(self):
+        resultado = self.requisicao(
+            "load_objects.fcgi",
+            {"object": "groups"}
+        )
+
+        return self._validar_lista_resposta(
+            resultado,
+            "groups",
+            "consulta de departamentos"
+        )
+
+    def consultar_vinculos_departamentos(self):
+        """
+        Consulta os vínculos entre usuários e departamentos.
+        """
+
+        resultado = self.requisicao(
+            "load_objects.fcgi",
+            {"object": "user_groups"}
+        )
+
+        return self._validar_lista_resposta(
+            resultado,
+            "user_groups",
+            "consulta de vínculos entre usuários e departamentos"
+        )
+
+    def associar_departamento_padrao(self, id_idface):
+        """
+        Associa o usuário ao departamento PADRÃO.
+
+        Confirma a criação do vínculo consultando novamente
+        os registros armazenados no equipamento.
+        """
+
+        try:
+            id_idface = int(id_idface)
+
+        except (ValueError, TypeError):
+            raise IDFaceError(
+                "O ID do usuário é inválido para associação ao departamento."
+            )
+
+        departamentos = self.consultar_departamentos()
+
+        nome_padrao = self._normalizar_nome_departamento("PADRÃO")
+
+        departamentos_padrao = [
+            departamento
+            for departamento in departamentos
+            if self._normalizar_nome_departamento(
+                departamento.get("name")
+            ) == nome_padrao
+        ]
+
+        if not departamentos_padrao:
+            raise IDFaceError(
+                "O departamento PADRÃO não foi encontrado no iDFace."
+            )
+
+        if len(departamentos_padrao) > 1:
+            raise IDFaceError(
+                "Foi encontrado mais de um departamento PADRÃO no iDFace."
+            )
+
+        try:
+            id_departamento = int(departamentos_padrao[0]["id"])
+
+        except (KeyError, ValueError, TypeError):
+            raise IDFaceError(
+                "O iDFace retornou um ID inválido para o departamento PADRÃO."
+            )
+
+        # Primeira consulta: verifica se o vínculo já existe.
+        vinculos = self.consultar_vinculos_departamentos()
+
+        ja_associado = any(
+            str(vinculo.get("user_id")) == str(id_idface)
+            and str(vinculo.get("group_id")) == str(id_departamento)
+            for vinculo in vinculos
+        )
+
+        if ja_associado:
+            return True
+
+        # Cria o vínculo no equipamento.
+        resultado_criacao = self.requisicao(
+            "create_objects.fcgi",
+            {
+                "object": "user_groups",
+                "values": [
+                    {
+                        "user_id": id_idface,
+                        "group_id": id_departamento
+                    }
+                ]
+            }
+        )
+
+        # A API deve retornar os IDs dos objetos criados.
+        ids_vinculo = self._validar_lista_ids(
+            resultado_criacao,
+            "ids",
+            "criação do vínculo com o departamento PADRÃO"
+        )
+
+        if not ids_vinculo:
+            raise IDFaceError(
+                "A API não confirmou a criação do vínculo com o "
+                "departamento PADRÃO: nenhum ID foi retornado."
+            )
+
+        # Segunda consulta: verifica o estado real no equipamento.
+        vinculos_atualizados = self.consultar_vinculos_departamentos()
+
+        vinculo_confirmado = any(
+            str(vinculo.get("user_id")) == str(id_idface)
+            and str(vinculo.get("group_id")) == str(id_departamento)
+            for vinculo in vinculos_atualizados
+        )
+
+        if not vinculo_confirmado:
+            raise IDFaceError(
+                "A API retornou um ID para o vínculo criado, mas a "
+                "associação não foi encontrada na consulta posterior "
+                "ao iDFace. "
+                f"Usuário: {id_idface}. "
+                f"Departamento: {id_departamento}. "
+                f"ID retornado: {ids_vinculo[0]}."
+            )
+
+        return True
+
     def consultar_fotos_usuarios(self, ids_usuarios):
         """
         Consulta fotos faciais de até 100 usuários por requisição.
@@ -341,8 +482,10 @@ class IDFaceClient:
 
     def cadastrar_usuario(self, usuario_id, nome):
         """
-        Cria no iDFace um usuário previamente cadastrado no MySQL.
-        A matrícula interna permite recuperar o vínculo posteriormente.
+        Cria um usuário no iDFace e associa ao departamento PADRÃO.
+
+        Se a associação não for confirmada, tenta remover
+        o cadastro incompleto do equipamento.
         """
 
         matricula_interna = f"WBZ{usuario_id:06d}"
@@ -371,7 +514,41 @@ class IDFaceClient:
                 "O iDFace não retornou o ID do usuário cadastrado."
             )
 
-        return ids[0]
+        id_novo_usuario = ids[0]
+
+        try:
+            self.associar_departamento_padrao(id_novo_usuario)
+
+        except IDFaceError as erro:
+            try:
+                self.requisicao(
+                    "destroy_objects.fcgi",
+                    {
+                        "object": "users",
+                        "where": {
+                            "users": {
+                                "id": id_novo_usuario
+                            }
+                        }
+                    }
+                )
+
+            except IDFaceError as erro_remocao:
+                raise IDFaceError(
+                    "O usuário foi criado no iDFace, mas não foi possível "
+                    "associá-lo ao departamento PADRÃO. Também houve falha "
+                    "ao tentar remover o cadastro incompleto. "
+                    f"Erro da associação: {erro}. "
+                    f"Erro da remoção: {erro_remocao}"
+                )
+
+            raise IDFaceError(
+                "O cadastro no iDFace foi cancelado porque não foi possível "
+                "confirmar a associação ao departamento PADRÃO. "
+                f"Motivo: {erro}"
+            )
+
+        return id_novo_usuario
 
     def editar_usuario(self, id_idface, nome):
         resultado = self.requisicao(
@@ -391,8 +568,7 @@ class IDFaceClient:
     def definir_administrador(self, id_idface, administrador):
         """
         Define a permissão administrativa no iDFace.
-        O equipamento possui somente dois níveis relevantes:
-        usuário normal e administrador.
+
         ADM e MASTER recebem o mesmo papel no equipamento.
         A distinção entre eles permanece no MySQL.
         """
@@ -447,15 +623,31 @@ class IDFaceClient:
 
     def excluir_usuario(self, id_idface):
         """
-        Remove os privilégios e o cadastro do usuário no iDFace.
-        Não altera registros ou históricos do MySQL.
+        Remove os privilégios, vínculos de departamento
+        e cadastro do usuário no iDFace.
         """
 
         self.requisicao(
             "destroy_objects.fcgi",
             {
                 "object": "user_roles",
-                "where": {"user_roles": {"user_id": id_idface}}
+                "where": {
+                    "user_roles": {
+                        "user_id": id_idface
+                    }
+                }
+            }
+        )
+
+        self.requisicao(
+            "destroy_objects.fcgi",
+            {
+                "object": "user_groups",
+                "where": {
+                    "user_groups": {
+                        "user_id": id_idface
+                    }
+                }
             }
         )
 
@@ -463,7 +655,11 @@ class IDFaceClient:
             "destroy_objects.fcgi",
             {
                 "object": "users",
-                "where": {"users": {"id": id_idface}}
+                "where": {
+                    "users": {
+                        "id": id_idface
+                    }
+                }
             }
         )
 

@@ -14,6 +14,7 @@ import config
 
 app = Flask(__name__)
 app.secret_key = config.FLASK_SECRET_KEY
+print("### WICKEDBOTZ APP.PY REVISADO CARREGADO ###", flush=True)
 
 # =====================================
 # CONFIGURACOES DE SEGURANCA
@@ -123,15 +124,108 @@ def conectar_banco():
 # =====================================
 
 def administrador_logado():
+    """Indica se existe uma sessão administrativa validada."""
     return "admin_id" in session
 
 
 def perfil_logado():
+    """Retorna o perfil carregado do MySQL na requisição atual."""
     return session.get("admin_perfil", "administrador")
 
 
 def master_logado():
+    """MASTER é um perfil do painel, nunca um papel separado no iDFace."""
     return administrador_logado() and perfil_logado() == "master"
+
+
+@app.before_request
+def diagnosticar_requisicao_exclusao_administrador():
+    """Registra a chegada da requisição mesmo se ela terminar em 404/405."""
+    if request.path.startswith("/administradores/excluir/"):
+        print(
+            f"[HTTP EXCLUSAO ADM] método={request.method} "
+            f"caminho={request.path} endpoint={request.endpoint}",
+            flush=True
+        )
+    return None
+
+
+@app.before_request
+def validar_sessao_administrativa():
+    """
+    Revalida a sessão no MySQL em toda requisição autenticada.
+
+    A tabela administradores define ADM/MASTER. A tabela usuarios
+    confirma que a conta continua ativa e na categoria administrador.
+    Assim, uma sessão antiga não mantém privilégios após desativação,
+    rebaixamento ou exclusão da conta.
+    """
+    if request.endpoint in ("login", "static", "logout"):
+        return None
+
+    id_administrador = session.get("admin_id")
+    if id_administrador is None:
+        return None
+
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.id_usuario,
+                a.nome,
+                a.perfil
+            FROM administradores a
+            INNER JOIN usuarios u ON u.id = a.id_usuario
+            WHERE a.id = %s
+              AND a.ativo = TRUE
+              AND u.ativo = TRUE
+              AND u.categoria = 'administrador'
+            LIMIT 1
+            """,
+            (id_administrador,)
+        )
+        administrador = cursor.fetchone()
+
+        if not administrador:
+            session.clear()
+            print(
+                "Sessão encerrada: conta administrativa inexistente, "
+                "inativa ou sem categoria administrativa.",
+                flush=True
+            )
+            return redirect(url_for("login"))
+
+        # O perfil da sessão é sempre atualizado com o valor atual do banco.
+        session["admin_id"] = administrador["id"]
+        session["admin_usuario_id"] = administrador["id_usuario"]
+        session["admin_nome"] = administrador["nome"]
+        session["admin_perfil"] = (
+            administrador["perfil"] or "administrador"
+        )
+
+    except mysql.connector.Error as erro:
+        print(
+            f"Falha ao revalidar sessão administrativa: {erro}",
+            flush=True
+        )
+        # Falha fechada: não autoriza uma operação com perfil não validado.
+        return (
+            "Não foi possível validar sua sessão no banco de dados. "
+            "Tente novamente em alguns instantes.",
+            503
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+        if conexao and conexao.is_connected():
+            conexao.close()
 
 
 def bloquear_se_nao_master():
@@ -194,9 +288,21 @@ def login():
 
             cursor.execute(
                 """
-                SELECT id, id_usuario, nome, usuario, senha_hash, perfil
-                FROM administradores
-                WHERE usuario = %s AND ativo = TRUE
+                SELECT
+                    a.id,
+                    a.id_usuario,
+                    a.nome,
+                    a.usuario,
+                    a.senha_hash,
+                    a.perfil
+                FROM administradores a
+                INNER JOIN usuarios u
+                    ON u.id = a.id_usuario
+                WHERE a.usuario = %s
+                  AND a.ativo = TRUE
+                  AND u.ativo = TRUE
+                  AND u.categoria = 'administrador'
+                LIMIT 1
                 """,
                 (usuario,)
             )
@@ -283,6 +389,36 @@ def usuarios():
         conexao = conectar_banco()
         cursor = conexao.cursor(dictionary=True)
 
+        # Regulariza cadastros administrativos órfãos.
+        # Se o usuário ainda está marcado como administrador, mas não
+        # possui mais registro correspondente em administradores, sua
+        # conta administrativa foi removida. Mantemos o histórico no
+        # MySQL, mas inativamos o cadastro para que não apareça na lista
+        # de usuários ativos. A sincronização tratará a remoção do iDFace.
+        cursor.execute(
+            """
+            UPDATE usuarios u
+            LEFT JOIN administradores a
+                ON a.id_usuario = u.id
+            SET
+                u.categoria = 'membro',
+                u.ativo = 0
+            WHERE u.categoria = 'administrador'
+              AND u.ativo = 1
+              AND a.id IS NULL
+            """
+        )
+
+        usuarios_regularizados = cursor.rowcount
+
+        if usuarios_regularizados > 0:
+            print(
+                "Cadastros administrativos órfãos regularizados: "
+                f"{usuarios_regularizados}. "
+                "Categoria alterada para membro, conta inativada "
+                "e histórico preservado."
+            )
+
         cursor.execute(
             """
             SELECT
@@ -296,6 +432,7 @@ def usuarios():
             LEFT JOIN administradores a
                 ON a.id_usuario = u.id
             WHERE u.ativo = 1
+              AND u.categoria = 'membro'
             ORDER BY u.nome ASC
             """
         )
@@ -1477,6 +1614,12 @@ def alterar_status_administrador(id_administrador):
     methods=["POST"]
 )
 def excluir_administrador(id_administrador):
+
+    print(
+        f"[ROTA EXCLUIR ADMINISTRADOR] POST recebido para "
+        f"administradores.id={id_administrador}",
+        flush=True
+    )
 
     resposta_bloqueio = bloquear_se_nao_master()
     if resposta_bloqueio:
