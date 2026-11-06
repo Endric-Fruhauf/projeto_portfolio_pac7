@@ -24,7 +24,7 @@
 <section class="admin-actions">
     <div>
         <h3>Administradores cadastrados</h3>
-        <p>Consulte os perfis e o status das contas administrativas.</p>
+        <p>Consulte os perfis e os dados das contas administrativas.</p>
     </div>
 
     {% if master_logado %}
@@ -44,7 +44,6 @@
                     <th>Usuário</th>
                     <th>Perfil</th>
                     <th>Data de cadastro</th>
-                    <th>Status</th>
                     <th>Ações</th>
                 </tr>
             </thead>
@@ -73,14 +72,6 @@
                         </td>
 
                         <td>
-                            {% if administrador.ativo %}
-                                <span class="admin-status active">Ativo</span>
-                            {% else %}
-                                <span class="admin-status inactive">Inativo</span>
-                            {% endif %}
-                        </td>
-
-                        <td>
                             <div class="admin-row-actions">
                                 {% if master_logado %}
                                     <a
@@ -91,19 +82,6 @@
                                     </a>
 
                                     {% if administrador.id != session.get('admin_id') %}
-                                        <form
-                                            action="{{ url_for('alterar_status_administrador', id_administrador=administrador.id) }}"
-                                            method="POST"
-                                            onsubmit="return confirm('Deseja realmente {{ 'desativar' if administrador.ativo else 'ativar' }} este administrador?');"
-                                        >
-                                            <button
-                                                type="submit"
-                                                class="admin-btn-status {{ 'deactivate' if administrador.ativo else 'activate' }}"
-                                            >
-                                                {{ 'Desativar' if administrador.ativo else 'Ativar' }}
-                                            </button>
-                                        </form>
-
                                         <form
                                             action="{{ url_for('excluir_administrador', id_administrador=administrador.id) }}"
                                             method="POST"
@@ -124,7 +102,7 @@
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="7" class="admin-empty">
+                        <td colspan="6" class="admin-empty">
                             Nenhum administrador cadastrado.
                         </td>
                     </tr>

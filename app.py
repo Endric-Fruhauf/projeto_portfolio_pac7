@@ -239,19 +239,6 @@ def bloquear_se_nao_master():
     return None
 
 
-def contar_administradores_ativos(cursor):
-    cursor.execute(
-        """
-        SELECT COUNT(*) AS total
-        FROM administradores
-        WHERE ativo = TRUE
-        """
-    )
-
-    resultado = cursor.fetchone()
-    return resultado["total"]
-
-
 # =====================================
 # PAGINA DE LOGIN
 # =====================================
@@ -390,11 +377,14 @@ def usuarios():
         cursor = conexao.cursor(dictionary=True)
 
         # Regulariza cadastros administrativos órfãos.
+        #
         # Se o usuário ainda está marcado como administrador, mas não
         # possui mais registro correspondente em administradores, sua
-        # conta administrativa foi removida. Mantemos o histórico no
-        # MySQL, mas inativamos o cadastro para que não apareça na lista
-        # de usuários ativos. A sincronização tratará a remoção do iDFace.
+        # conta administrativa foi removida.
+        #
+        # Nesse caso, mantemos o cadastro histórico no MySQL, mas
+        # inativamos a conta e alteramos sua categoria para membro.
+        # A sincronização automática tratará a remoção do iDFace.
         cursor.execute(
             """
             UPDATE usuarios u
@@ -411,14 +401,31 @@ def usuarios():
 
         usuarios_regularizados = cursor.rowcount
 
+        # IMPORTANTE:
+        # Confirma a regularização no banco. Sem este commit,
+        # a alteração poderia ser desfeita ao fechar a conexão.
         if usuarios_regularizados > 0:
+            conexao.commit()
+
             print(
                 "Cadastros administrativos órfãos regularizados: "
                 f"{usuarios_regularizados}. "
                 "Categoria alterada para membro, conta inativada "
-                "e histórico preservado."
+                "e histórico preservado.",
+                flush=True
             )
 
+        # Lista:
+        # 1. Membros ativos.
+        # 2. Administradores ativos.
+        # 3. Masters ativos.
+        #
+        # Uma conta administrativa só aparece se estiver ativa
+        # nas duas tabelas: usuarios e administradores.
+        #
+        # Se a conta for excluída pela tela de administradores,
+        # ela não aparecerá aqui, pois será inativada e seu registro
+        # administrativo será removido.
         cursor.execute(
             """
             SELECT
@@ -432,7 +439,14 @@ def usuarios():
             LEFT JOIN administradores a
                 ON a.id_usuario = u.id
             WHERE u.ativo = 1
-              AND u.categoria = 'membro'
+              AND (
+                    u.categoria = 'membro'
+                    OR (
+                        u.categoria = 'administrador'
+                        AND a.id IS NOT NULL
+                        AND a.ativo = 1
+                    )
+              )
             ORDER BY u.nome ASC
             """
         )
@@ -447,7 +461,10 @@ def usuarios():
         )
 
     except mysql.connector.Error as erro:
-        print(f"Erro ao consultar usuários: {erro}")
+        if conexao:
+            conexao.rollback()
+
+        print(f"Erro ao consultar usuários: {erro}", flush=True)
 
         return render_template(
             "usuarios.html",
@@ -1509,93 +1526,6 @@ def editar_administrador(id_administrador):
             master_logado=master_logado(),
             erro="Não foi possível atualizar o administrador."
         )
-
-    finally:
-        if cursor:
-            cursor.close()
-
-        if conexao and conexao.is_connected():
-            conexao.close()
-
-
-# =====================================
-# ATIVAR / DESATIVAR ADMINISTRADOR
-# =====================================
-
-@app.route(
-    "/administradores/status/<int:id_administrador>",
-    methods=["POST"]
-)
-def alterar_status_administrador(id_administrador):
-
-    resposta_bloqueio = bloquear_se_nao_master()
-    if resposta_bloqueio:
-        return resposta_bloqueio
-
-    if id_administrador == session.get("admin_id"):
-        print("Alteração de status bloqueada: tentativa na própria conta.")
-        return redirect(url_for("administradores"))
-
-    conexao = None
-    cursor = None
-
-    try:
-        conexao = conectar_banco()
-        cursor = conexao.cursor(dictionary=True)
-
-        cursor.execute(
-            """
-            SELECT id, ativo
-            FROM administradores
-            WHERE id = %s
-            FOR UPDATE
-            """,
-            (id_administrador,)
-        )
-
-        administrador = cursor.fetchone()
-
-        if not administrador:
-            return redirect(url_for("administradores"))
-
-        novo_status = not bool(administrador["ativo"])
-
-        if not novo_status:
-            total_ativos = contar_administradores_ativos(cursor)
-
-            if total_ativos <= 1:
-                print(
-                    "Alteração bloqueada: não é permitido "
-                    "desativar o último administrador ativo."
-                )
-                conexao.rollback()
-                return redirect(url_for("administradores"))
-
-        cursor.execute(
-            """
-            UPDATE administradores
-            SET ativo = %s
-            WHERE id = %s
-            """,
-            (novo_status, id_administrador)
-        )
-
-        conexao.commit()
-
-        print(
-            f"Status do administrador {id_administrador}: "
-            f"{'ativo' if novo_status else 'inativo'}"
-        )
-
-        return redirect(url_for("administradores"))
-
-    except mysql.connector.Error as erro:
-        if conexao:
-            conexao.rollback()
-
-        print(f"Erro ao alterar status do administrador: {erro}")
-
-        return redirect(url_for("administradores"))
 
     finally:
         if cursor:
