@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Painel Administrativo{% endblock %}
@@ -11,6 +10,52 @@
         <p>Bem-vindo ao sistema de controle de acesso.</p>
     </div>
 </header>
+
+{% with mensagens = get_flashed_messages(with_categories=true) %}
+    {% if mensagens %}
+        <div class="dashboard-messages">
+            {% for categoria, mensagem in mensagens %}
+                <div class="dashboard-message {{ categoria }}" role="alert">
+                    {{ mensagem }}
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endwith %}
+
+{% if master_logado %}
+<section class="door-control-section">
+
+    <div class="door-control-info">
+        <div class="door-control-icon" aria-hidden="true">
+            <span>↗</span>
+        </div>
+
+        <div class="door-control-text">
+            <h3>Controle da porta</h3>
+            <p>Acionamento remoto da abertura de acesso.</p>
+        </div>
+    </div>
+
+    <form
+        class="door-control-form"
+        method="POST"
+        action="{{ url_for('abrir_porta_remota') }}"
+        onsubmit="return confirm('Tem certeza de que deseja solicitar a abertura remota da porta?');"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <button type="submit" class="btn-open-door">
+            ABRIR PORTA
+        </button>
+    </form>
+
+    <p class="door-control-status">
+        Abertura remota disponível exclusivamente para contas MASTER.
+    </p>
+
+</section>
+{% endif %}
 
 <section class="welcome-section">
 

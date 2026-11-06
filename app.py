@@ -2097,7 +2097,6 @@ def iniciar_sincronizacao():
     )
 
     thread.start()
-
     print("Sincronização executada em segundo plano!\n")
 
 

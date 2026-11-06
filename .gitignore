@@ -1,16 +1,18 @@
-# Ambiente virtual
-venv/
+# Chaves e certificados
+*.pem
+*.key
+*.p12
+*.pfx
 
-# Credenciais
-config.py
-.env
+# Logs
+*.log
+logs/
 
-# Cache Python
-__pycache__/
-*.pyc
+# Banco de dados local
+*.sqlite
+*.sqlite3
+*.db
 
-# Configurações locais do PyCharm
-.idea/
-
-# Certificados e chaves privadas do iDFace
-certificados/
+# Variáveis de ambiente
+.env.*
+!.env.example

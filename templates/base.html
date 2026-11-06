@@ -1,11 +1,10 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>{% block title %}Wickedbotz - Painel Administrativo{% endblock %}</title>
+    <title>{% block title %}Wickedbotz{% endblock %}</title>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
@@ -21,7 +20,7 @@
 
             <div class="sidebar-header">
                 <h1>Wickedbotz</h1>
-                <p>Painel Administrativo</p>
+                <p>Sistema de Controle de Acesso</p>
             </div>
 
             <nav class="sidebar-menu">
@@ -35,7 +34,7 @@
 
                 <a
                     href="{{ url_for('usuarios') }}"
-                    class="menu-item {% if request.endpoint in ['usuarios', 'novo_usuario', 'editar_usuario', 'editar_administrador'] %}active{% endif %}"
+                    class="menu-item {% if request.endpoint in ['usuarios', 'novo_usuario', 'editar_usuario'] %}active{% endif %}"
                 >
                     Usuários
                 </a>
@@ -50,14 +49,21 @@
             </nav>
 
             <div class="sidebar-footer">
-                <span>Olá, {{ session['admin_nome'] }}</span>
-                <a href="{{ url_for('logout') }}">Sair</a>
+                <span>
+                    {{ session.get('admin_nome', 'Administrador') }}
+                </span>
+
+                <a href="{{ url_for('logout') }}">
+                    Sair do sistema
+                </a>
             </div>
 
         </aside>
 
         <main class="main-content {% block main_class %}{% endblock %}">
+
             {% block content %}{% endblock %}
+
         </main>
 
     </div>
