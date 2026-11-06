@@ -1,5 +1,5 @@
 
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, flash
 import mysql.connector
 from werkzeug.security import check_password_hash, generate_password_hash
 from threading import Thread, Lock
@@ -7,6 +7,8 @@ from datetime import timedelta
 import os
 import time
 import math
+import secrets
+import hmac
 
 from idface import IDFaceClient, IDFaceError
 from servidor import iniciar_servidor
@@ -353,7 +355,298 @@ def painel():
     if not administrador_logado():
         return redirect(url_for("login"))
 
-    return render_template("painel.html")
+    csrf_token = session.get("csrf_token")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(32)
+        session["csrf_token"] = csrf_token
+
+    return render_template(
+        "painel.html",
+        master_logado=master_logado(),
+        csrf_token=csrf_token
+    )
+
+
+def registrar_abertura_remota(
+    id_administrador,
+    nome_administrador,
+    resultado,
+    detalhe,
+    id_dispositivo=None
+):
+    """
+    Registra a tentativa de abertura remota em tabela separada.
+    Não altera registros_acesso, que permanece reservado aos eventos
+    recebidos do iDFace.
+    """
+    conexao = None
+    cursor = None
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO aberturas_remotas (
+                id_administrador,
+                nome_administrador,
+                data_hora,
+                resultado,
+                detalhe,
+                id_dispositivo
+            )
+            VALUES (%s, %s, NOW(), %s, %s, %s)
+            """,
+            (
+                id_administrador,
+                nome_administrador,
+                resultado,
+                detalhe[:500] if detalhe else None,
+                str(id_dispositivo) if id_dispositivo is not None else None
+            )
+        )
+
+        conexao.commit()
+
+    except mysql.connector.Error as erro:
+        print(
+            f"Falha ao registrar auditoria da abertura remota: {erro}",
+            flush=True
+        )
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+@app.route("/painel/abrir-porta", methods=["POST"])
+def abrir_porta_remota():
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    token_sessao = session.get("csrf_token", "")
+    token_formulario = request.form.get("csrf_token", "")
+
+    if (
+        not token_sessao
+        or not token_formulario
+        or not hmac.compare_digest(token_sessao, token_formulario)
+    ):
+        return "Solicitação inválida. Atualize a página e tente novamente.", 400
+
+    conexao = None
+    cursor = None
+    administrador = None
+
+    try:
+        # A permissão é consultada novamente no MySQL.
+        # Não confiamos somente no perfil armazenado na sessão.
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                a.id,
+                a.nome,
+                a.perfil
+            FROM administradores a
+            INNER JOIN usuarios u ON u.id = a.id_usuario
+            WHERE a.id = %s
+              AND a.ativo = TRUE
+              AND u.ativo = TRUE
+              AND u.categoria = 'administrador'
+              AND a.perfil = 'master'
+            LIMIT 1
+            """,
+            (session.get("admin_id"),)
+        )
+
+        administrador = cursor.fetchone()
+
+    except mysql.connector.Error as erro:
+        print(
+            f"Erro ao validar permissão de abertura remota: {erro}",
+            flush=True
+        )
+        flash(
+            "Não foi possível validar sua permissão no banco de dados.",
+            "erro"
+        )
+        return redirect(url_for("painel"))
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+    if not administrador:
+        flash(
+            "A abertura remota é permitida somente para contas MASTER ativas.",
+            "erro"
+        )
+        return redirect(url_for("painel"))
+
+    id_dispositivo = None
+
+    try:
+        with IDFaceClient() as idface:
+
+            # Descobre o identificador da SecBox conectada ao iDFace.
+            # Assim não presumimos um ID fixo que pode variar por equipamento.
+            estado_portas = idface.requisicao(
+                "doors_state.fcgi",
+                {}
+            )
+
+            # Diagnóstico temporário: registra somente a estrutura retornada
+            # pelo equipamento, sem expor sessão, senha ou credenciais.
+            print(
+                "[DIAGNOSTICO SECOBOX] Resposta completa de "
+                f"doors_state.fcgi: {estado_portas!r}",
+                flush=True
+            )
+            print(
+                "[DIAGNOSTICO SECOBOX] Tipo da resposta: "
+                f"{type(estado_portas).__name__}; "
+                "chaves: "
+                f"{list(estado_portas.keys()) if isinstance(estado_portas, dict) else 'N/A'}",
+                flush=True
+            )
+
+            if not isinstance(estado_portas, dict):
+                raise IDFaceError(
+                    "O iDFace retornou um formato inesperado ao consultar "
+                    "doors_state.fcgi. Consulte o log [DIAGNOSTICO SECOBOX] "
+                    "do servidor."
+                )
+
+            sec_boxes = estado_portas.get("sec_boxes", [])
+            print(
+                "[DIAGNOSTICO SECOBOX] sec_boxes="
+                f"{sec_boxes!r}; quantidade="
+                f"{len(sec_boxes) if isinstance(sec_boxes, list) else 'não é lista'}",
+                flush=True
+            )
+
+            if not isinstance(sec_boxes, list):
+                raise IDFaceError(
+                    "O iDFace retornou sec_boxes em um formato inesperado. "
+                    "Consulte o log [DIAGNOSTICO SECOBOX] do servidor."
+                )
+
+            # A documentação oficial da Control iD apresenta duas entradas
+            # no retorno de doors_state.fcgi para equipamentos com SecBox.
+            # No exemplo oficial de acionamento do módulo externo, o ID usado
+            # é 65793. Portanto, não devemos exigir que a lista tenha apenas
+            # um item nem escolher simplesmente o primeiro ID retornado.
+            sec_boxes_validas = [
+                sec_box for sec_box in sec_boxes
+                if isinstance(sec_box, dict) and sec_box.get("id") is not None
+            ]
+
+            sec_boxes_acionaveis = [
+                sec_box for sec_box in sec_boxes_validas
+                if str(sec_box.get("id")) == "65793"
+            ]
+
+            if len(sec_boxes_acionaveis) != 1:
+                ids_encontrados = [
+                    sec_box.get("id") for sec_box in sec_boxes_validas
+                ]
+                raise IDFaceError(
+                    "Não foi possível identificar de forma inequívoca a SecBox "
+                    "documentada para acionamento (ID 65793). "
+                    f"IDs retornados pelo iDFace: {ids_encontrados!r}. "
+                    "O comando não foi enviado."
+                )
+
+            id_dispositivo = sec_boxes_acionaveis[0].get("id")
+
+            print(
+                "[DIAGNOSTICO SECOBOX] SecBox selecionada para acionamento: "
+                f"ID {id_dispositivo}",
+                flush=True
+            )
+
+            resposta = idface.requisicao(
+                "execute_actions.fcgi",
+                {
+                    "actions": [
+                        {
+                            "action": "sec_box",
+                            "parameters": (
+                                f"id={id_dispositivo}, reason=3"
+                            )
+                        }
+                    ]
+                }
+            )
+
+            acoes = resposta.get("actions", []) if isinstance(
+                resposta, dict
+            ) else []
+
+            acao_negada = any(
+                isinstance(acao, dict)
+                and str(acao.get("status", "")).lower() == "denied"
+                for acao in acoes
+            )
+
+            if acao_negada:
+                raise IDFaceError(
+                    "O iDFace recusou o acionamento da SecBox."
+                )
+
+        detalhe = (
+            "Comando de abertura remota enviado ao iDFace."
+        )
+
+        registrar_abertura_remota(
+            administrador["id"],
+            administrador["nome"],
+            "sucesso",
+            detalhe,
+            id_dispositivo
+        )
+
+        flash(
+            "Comando de abertura enviado ao iDFace. "
+            "O retorno da API não confirma, por si só, a abertura física da porta.",
+            "sucesso"
+        )
+
+    except Exception as erro:
+        detalhe = str(erro) or "Falha não identificada no acionamento."
+
+        print(
+            f"Falha na abertura remota solicitada por "
+            f"{administrador['nome']}: {detalhe}",
+            flush=True
+        )
+
+        registrar_abertura_remota(
+            administrador["id"],
+            administrador["nome"],
+            "falha",
+            detalhe,
+            id_dispositivo
+        )
+
+        flash(
+            "Não foi possível enviar o comando de abertura ao iDFace. "
+            "Verifique a conexão e os registros do servidor.",
+            "erro"
+        )
+
+    return redirect(url_for("painel"))
 
 
 # =====================================
@@ -1821,3 +2114,4 @@ if __name__ == "__main__":
         iniciar_sincronizacao()
 
     app.run(debug=DEBUG)
+
