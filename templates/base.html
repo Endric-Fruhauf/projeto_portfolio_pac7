@@ -7,11 +7,9 @@
 
     <title>{% block title %}Wickedbotz - Painel Administrativo{% endblock %}</title>
 
-    <!-- CSS global -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/painel.css') }}">
 
-    <!-- CSS específico de cada página -->
     {% block extra_css %}{% endblock %}
 </head>
 
@@ -19,7 +17,6 @@
 
     <div class="dashboard-container">
 
-        <!-- Menu lateral -->
         <aside class="sidebar">
 
             <div class="sidebar-header">
@@ -38,7 +35,7 @@
 
                 <a
                     href="{{ url_for('usuarios') }}"
-                    class="menu-item {% if request.endpoint in ['usuarios', 'novo_usuario', 'editar_usuario'] %}active{% endif %}"
+                    class="menu-item {% if request.endpoint in ['usuarios', 'novo_usuario', 'editar_usuario', 'editar_administrador'] %}active{% endif %}"
                 >
                     Usuários
                 </a>
@@ -50,13 +47,6 @@
                     Registros de acesso
                 </a>
 
-                <a
-                    href="{{ url_for('administradores') }}"
-                    class="menu-item {% if request.endpoint in ['administradores', 'novo_administrador', 'editar_administrador'] %}active{% endif %}"
-                >
-                    Administradores
-                </a>
-
             </nav>
 
             <div class="sidebar-footer">
@@ -66,16 +56,12 @@
 
         </aside>
 
-        <!-- Conteúdo da página -->
         <main class="main-content {% block main_class %}{% endblock %}">
-
             {% block content %}{% endblock %}
-
         </main>
 
     </div>
 
-    <!-- JavaScript específico de cada página -->
     {% block scripts %}{% endblock %}
 
 </body>

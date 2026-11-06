@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Usuários{% endblock %}
@@ -11,7 +12,7 @@
 <header class="content-header">
     <div>
         <h2>Gerenciamento de usuários</h2>
-        <p>Consulte os usuários comuns e as contas administrativas do sistema.</p>
+        <p>Consulte e gerencie os membros e as contas administrativas do sistema.</p>
     </div>
 </header>
 
@@ -19,52 +20,116 @@
     <p class="mensagem-erro">{{ erro }}</p>
 {% endif %}
 
-<section class="users-actions">
+<form method="GET" action="{{ url_for('usuarios') }}" class="users-filters">
+
     <div class="users-search">
+
         <input
             type="search"
+            name="q"
+            value="{{ pesquisa }}"
             placeholder="Pesquisar por nome..."
             aria-label="Pesquisar usuários"
         >
+
+        <button type="submit" class="btn-search">
+            Pesquisar
+        </button>
+
+        <a href="{{ url_for('usuarios') }}" class="btn-clear">
+            Limpar
+        </a>
+
+        <a href="{{ url_for('novo_usuario') }}" class="btn-primary">
+            + Novo usuário
+        </a>
+
     </div>
 
-    <a href="{{ url_for('novo_usuario') }}" class="btn-primary">
-        + Novo usuário
-    </a>
-</section>
+    <div class="category-filters">
 
+        <a href="{{ url_for('usuarios', categoria='todos', q=pesquisa) }}"
+           class="category-filter {% if filtro_categoria == 'todos' %}active{% endif %}">
+            Todos
+        </a>
+
+        <a href="{{ url_for('usuarios', categoria='membro', q=pesquisa) }}"
+           class="category-filter {% if filtro_categoria == 'membro' %}active{% endif %}">
+            Membros
+        </a>
+
+        <a href="{{ url_for('usuarios', categoria='administrador', q=pesquisa) }}"
+           class="category-filter {% if filtro_categoria == 'administrador' %}active{% endif %}">
+            Administradores
+        </a>
+
+        <a href="{{ url_for('usuarios', categoria='master', q=pesquisa) }}"
+           class="category-filter {% if filtro_categoria == 'master' %}active{% endif %}">
+            MASTER
+        </a>
+
+    </div>
+
+</form>
+
+<!-- TABELA DE USUÁRIOS -->
 <section class="users-table-container">
+
     <div class="table-header">
-        <h3>Usuários cadastrados</h3>
+        <div>
+            <h3>Usuários cadastrados</h3>
+            <p>
+                {% if filtro_categoria == 'membro' %}
+                    Exibindo membros.
+                {% elif filtro_categoria == 'administrador' %}
+                    Exibindo administradores.
+                {% elif filtro_categoria == 'master' %}
+                    Exibindo contas MASTER.
+                {% else %}
+                    Exibindo todas as categorias.
+                {% endif %}
+            </p>
+        </div>
     </div>
 
     <div class="table-responsive">
         <table class="users-table">
+
             <thead>
                 <tr>
                     <th>ID</th>
                     <th>Nome</th>
+                    <th>Usuário do painel</th>
                     <th>Categoria</th>
                     <th>ID iDFace</th>
+                    <th>Data de cadastro</th>
                     <th>Ações</th>
                 </tr>
             </thead>
 
             <tbody>
+
                 {% for usuario in usuarios %}
+
                     <tr>
+
                         <td>{{ usuario.id }}</td>
+
                         <td>{{ usuario.nome }}</td>
 
                         <td>
+                            {{ usuario.usuario_admin if usuario.usuario_admin else '-' }}
+                        </td>
+
+                        <td>
                             {% if usuario.categoria == 'administrador' %}
+
                                 {% if usuario.perfil_administrativo == 'master' %}
                                     <span class="user-category master">MASTER</span>
-                                {% elif usuario.perfil_administrativo == 'administrador' %}
-                                    <span class="user-category admin">ADM</span>
                                 {% else %}
-                                    <span class="user-category admin">Administrador</span>
+                                    <span class="user-category admin">ADM</span>
                                 {% endif %}
+
                             {% else %}
                                 <span class="user-category member">Membro</span>
                             {% endif %}
@@ -74,50 +139,93 @@
                             {{ usuario.id_idface if usuario.id_idface is not none else '-' }}
                         </td>
 
-                        <td class="user-actions">
-                            {% if usuario.categoria == 'membro' %}
-                                <a
-                                    href="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
-                                    class="btn-edit"
-                                >
-                                    Editar
-                                </a>
-
-                                <form
-                                    action="{{ url_for('excluir_usuario', id_usuario=usuario.id) }}"
-                                    method="POST"
-                                    onsubmit="return confirm('Tem certeza de que deseja excluir este usuário? Essa ação também o removerá do iDFace. O histórico de acessos será preservado.');"
-                                >
-                                    <button type="submit" class="btn-delete">
-                                        Excluir
-                                    </button>
-                                </form>
-
-                            {% elif master_logado and usuario.id_administrador %}
-                                <a
-                                    href="{{ url_for('editar_administrador', id_administrador=usuario.id_administrador) }}"
-                                    class="btn-edit"
-                                >
-                                    Editar
-                                </a>
-
+                        <td>
+                            {% if usuario.data_cadastro %}
+                                {{ usuario.data_cadastro.strftime('%d/%m/%Y %H:%M') }}
                             {% else %}
-                                <span class="user-action-restricted">
-                                    Edição exclusiva do MASTER
-                                </span>
+                                -
                             {% endif %}
                         </td>
+
+                        <td>
+                            <div class="user-actions">
+
+                                {% if usuario.categoria == 'membro' %}
+
+                                    <a
+                                        href="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+                                        class="btn-edit"
+                                    >
+                                        Editar
+                                    </a>
+
+                                    <form
+                                        action="{{ url_for('excluir_usuario', id_usuario=usuario.id) }}"
+                                        method="POST"
+                                        onsubmit="return confirm('Tem certeza de que deseja excluir este usuário? Essa ação também o removerá do iDFace. O histórico de acessos será preservado.');"
+                                    >
+                                        <button type="submit" class="btn-delete">
+                                            Excluir
+                                        </button>
+                                    </form>
+
+                                {% elif master_logado and usuario.id_administrador %}
+
+                                    <a
+                                        href="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+                                        class="btn-edit"
+                                    >
+                                        Editar
+                                    </a>
+
+                                    {% if usuario.id_administrador != session.get('admin_id') %}
+
+                                        <form
+                                            action="{{ url_for('excluir_administrador', id_administrador=usuario.id_administrador) }}"
+                                            method="POST"
+                                            onsubmit="return confirm('Tem certeza de que deseja excluir esta conta administrativa? O cadastro será inativado, a conta administrativa será removida e o histórico de acessos será preservado.');"
+                                        >
+                                            <button type="submit" class="btn-delete">
+                                                Excluir
+                                            </button>
+                                        </form>
+
+                                    {% else %}
+
+                                        <span class="user-action-restricted current-account">
+                                            Conta atual
+                                        </span>
+
+                                    {% endif %}
+
+                                {% else %}
+
+                                    <span class="user-action-restricted">
+                                        Somente MASTER
+                                    </span>
+
+                                {% endif %}
+
+                            </div>
+                        </td>
+
                     </tr>
+
                 {% else %}
+
                     <tr>
-                        <td colspan="5" class="empty-table">
-                            Nenhum usuário cadastrado.
+                        <td colspan="7" class="empty-table">
+                            Nenhum usuário encontrado para este filtro.
                         </td>
                     </tr>
+
                 {% endfor %}
+
             </tbody>
+
         </table>
     </div>
+
 </section>
 
 {% endblock %}

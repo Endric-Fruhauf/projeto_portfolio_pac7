@@ -2,7 +2,7 @@
 import mysql.connector
 import config
 
-from datetime import datetime
+from datetime import datetime, timezone
 from idface import IDFaceError
 
 
@@ -21,14 +21,25 @@ def _converter_inteiro(valor):
 
 
 def _converter_data_hora(horario):
-    """Converte o timestamp Unix para datetime local."""
+    """
+    Converte o timestamp Unix recebido do iDFace para o horário
+    local representado pelo equipamento.
+
+    O iDFace fornece o horário local codificado como timestamp UTC.
+    Por isso, interpretamos o timestamp em UTC e removemos a
+    informação de fuso antes de gravar no MySQL.
+    """
     timestamp = _converter_inteiro(horario)
 
     if timestamp is None:
         return None
 
     try:
-        return datetime.fromtimestamp(timestamp)
+        return datetime.fromtimestamp(
+            timestamp,
+            timezone.utc
+        ).replace(tzinfo=None)
+
     except (ValueError, OverflowError, OSError):
         return None
 

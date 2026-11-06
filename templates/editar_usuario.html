@@ -1,3 +1,4 @@
+
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Editar Usuário{% endblock %}
@@ -9,13 +10,13 @@
 {% block content %}
 
 <header class="content-header">
-    <h2>Editar usuário</h2>
-    <p>Altere os dados e as permissões do usuário.</p>
+    <div>
+        <h2>Editar usuário</h2>
+        <p>Altere os dados e as permissões do usuário.</p>
+    </div>
 </header>
 
 <section class="edit-user-container">
-
-    <h3>Dados do usuário</h3>
 
     {% if erro %}
         <div class="edit-user-error">
@@ -27,163 +28,329 @@
         method="POST"
         action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
         class="edit-user-form"
+        id="form-editar-usuario"
     >
 
-        <label for="id">ID do usuário</label>
+        <div class="edit-user-field">
+            <label for="id_usuario">ID do usuário</label>
+            <input
+                type="text"
+                id="id_usuario"
+                value="{{ usuario.id }}"
+                disabled
+            >
+        </div>
 
-        <input
-            type="text"
-            id="id"
-            value="{{ usuario.id }}"
-            disabled
+        <div class="edit-user-field">
+            <label for="id_idface">ID iDFace</label>
+            <input
+                type="text"
+                id="id_idface"
+                value="{{ usuario.id_idface if usuario.id_idface is not none else '-' }}"
+                disabled
+            >
+        </div>
+
+        <div class="edit-user-field">
+            <label for="nome">Nome completo</label>
+            <input
+                type="text"
+                id="nome"
+                name="nome"
+                value="{{ usuario.nome }}"
+                maxlength="150"
+                required
+                autocomplete="name"
+            >
+        </div>
+
+        <div class="edit-user-field">
+            <label for="categoria">Cargo / categoria</label>
+
+            {% if master_logado %}
+
+                <select
+                    id="categoria"
+                    name="categoria"
+                    required
+                >
+                    <option
+                        value="membro"
+                        {% if categoria_selecionada == 'membro' %}selected{% endif %}
+                    >
+                        Membro
+                    </option>
+
+                    <option
+                        value="administrador"
+                        {% if categoria_selecionada == 'administrador' %}selected{% endif %}
+                    >
+                        Administrador
+                    </option>
+
+                    <option
+                        value="master"
+                        {% if categoria_selecionada == 'master' %}selected{% endif %}
+                    >
+                        MASTER
+                    </option>
+                </select>
+
+                <small class="edit-user-help">
+                    Somente contas MASTER podem alterar o cargo de usuários e administradores.
+                </small>
+
+            {% else %}
+
+                <input
+                    type="text"
+                    value="Membro"
+                    disabled
+                >
+
+                <small class="edit-user-help">
+                    Administradores comuns podem editar os dados dos membros, mas não podem alterar cargos.
+                </small>
+
+            {% endif %}
+        </div>
+
+        <div
+            id="credenciais-administrativas"
+            class="edit-user-credentials"
         >
 
-        <label for="id_idface">ID iDFace</label>
-
-        <input
-            type="text"
-            id="id_idface"
-            value="{{ usuario.id_idface }}"
-            disabled
-        >
-
-        <label for="nome">Nome completo</label>
-
-        <input
-            type="text"
-            id="nome"
-            name="nome"
-            value="{{ usuario.nome }}"
-            maxlength="100"
-            required
-        >
-
-        {% if master_logado %}
-
-            <label for="categoria">Cargo</label>
-
-            <select id="categoria" name="categoria" required>
-
-                <option
-                    value="membro"
-                    {% if categoria_selecionada == 'membro' or (not categoria_selecionada and usuario.categoria == 'membro') %}selected{% endif %}
-                >
-                    Membro
-                </option>
-
-                <option
-                    value="administrador"
-                    {% if categoria_selecionada == 'administrador' %}selected{% endif %}
-                >
-                    Administrador (ADM)
-                </option>
-
-                <option
-                    value="master"
-                    {% if categoria_selecionada == 'master' %}selected{% endif %}
-                >
-                    MASTER
-                </option>
-
-            </select>
-
-            <div id="credenciais-administrativas" style="display: none;">
-
-                <h3>Credenciais de acesso ao painel</h3>
-
+            <div class="edit-user-section-heading">
+                <h3>Credenciais do painel</h3>
                 <p>
-                    Defina o login e a senha que serão utilizados por este usuário
-                    para acessar o painel administrativo.
+                    Defina os dados utilizados para acessar o painel administrativo.
                 </p>
+            </div>
 
-                <label for="usuario_admin">Nome de usuário</label>
-
+            <div class="edit-user-field">
+                <label for="usuario_admin">Usuário do painel</label>
                 <input
                     type="text"
                     id="usuario_admin"
                     name="usuario_admin"
                     value="{{ usuario_admin or '' }}"
-                    maxlength="50"
+                    maxlength="100"
                     autocomplete="username"
                 >
+            </div>
 
-                <label for="senha_admin">Senha</label>
+            <div class="edit-user-field">
+                <label for="senha_admin">
+                    {% if conta_administrativa_existente %}
+                        Nova senha
+                    {% else %}
+                        Senha
+                    {% endif %}
+                </label>
 
                 <input
                     type="password"
                     id="senha_admin"
                     name="senha_admin"
-                    maxlength="100"
+                    minlength="8"
                     autocomplete="new-password"
-                    placeholder="Defina a senha de acesso"
                 >
 
-                <small>
-                    A senha será armazenada utilizando hash de segurança.
-                    Ela deve possuir pelo menos 8 caracteres.
-                </small>
-
+                {% if conta_administrativa_existente %}
+                    <small class="edit-user-help">
+                        Deixe em branco para manter a senha atual. Para alterá-la, informe uma nova senha e confirme abaixo.
+                    </small>
+                {% else %}
+                    <small class="edit-user-help">
+                        A senha deve possuir pelo menos 8 caracteres.
+                    </small>
+                {% endif %}
             </div>
 
-        {% else %}
+            <div class="edit-user-field">
+                <label for="confirmar_senha">
+                    Confirmar senha
+                </label>
 
-            <label for="categoria_exibida">Cargo</label>
+                <input
+                    type="password"
+                    id="confirmar_senha"
+                    name="confirmar_senha"
+                    minlength="8"
+                    autocomplete="new-password"
+                >
 
-            <input
-                type="text"
-                id="categoria_exibida"
-                value="Membro"
-                disabled
-            >
+                <small class="edit-user-help">
+                    Confirme a senha informada acima.
+                </small>
+            </div>
 
-        {% endif %}
+            {% if conta_administrativa_existente %}
+                <div class="edit-user-password-notice">
+                    A senha atual não é exibida por segurança. Se não desejar alterá-la, deixe os dois campos de senha vazios.
+                </div>
+            {% endif %}
+
+        </div>
 
         <div class="edit-user-actions">
-
-            <button type="submit" class="btn-primary">
+            <button
+                type="submit"
+                class="btn-primary"
+            >
                 Salvar alterações
             </button>
 
-            <a href="{{ url_for('usuarios') }}" class="btn-secondary">
+            <a
+                href="{{ url_for('usuarios') }}"
+                class="btn-secondary"
+            >
                 Cancelar
             </a>
-
         </div>
 
     </form>
 
 </section>
 
-{% if master_logado %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-
     const categoria = document.getElementById("categoria");
     const credenciais = document.getElementById("credenciais-administrativas");
+
     const usuarioAdmin = document.getElementById("usuario_admin");
     const senhaAdmin = document.getElementById("senha_admin");
+    const confirmarSenha = document.getElementById("confirmar_senha");
 
-    function atualizarCredenciais() {
+    const formulario = document.getElementById("form-editar-usuario");
 
-        const precisaCredenciais =
-            categoria.value === "administrador" ||
-            categoria.value === "master";
+    const contaAdministrativaExistente =
+        {{ 'true' if conta_administrativa_existente else 'false' }};
 
-        credenciais.style.display = precisaCredenciais ? "block" : "none";
+    const masterLogado =
+        {{ 'true' if master_logado else 'false' }};
 
-        usuarioAdmin.required = precisaCredenciais;
-        senhaAdmin.required = precisaCredenciais;
+    function atualizarCampos() {
+        const cargoSelecionado = categoria
+            ? categoria.value
+            : "membro";
 
-        usuarioAdmin.disabled = !precisaCredenciais;
-        senhaAdmin.disabled = !precisaCredenciais;
+        const seraAdministrador = (
+            cargoSelecionado === "administrador" ||
+            cargoSelecionado === "master"
+        );
+
+        if (!credenciais) {
+            return;
+        }
+
+        credenciais.style.display = seraAdministrador
+            ? "flex"
+            : "none";
+
+        if (usuarioAdmin) {
+            usuarioAdmin.disabled = !seraAdministrador;
+            usuarioAdmin.required = seraAdministrador;
+        }
+
+        if (senhaAdmin) {
+            senhaAdmin.disabled = !seraAdministrador;
+
+            senhaAdmin.required = (
+                seraAdministrador &&
+                !contaAdministrativaExistente
+            );
+        }
+
+        if (confirmarSenha) {
+            confirmarSenha.disabled = !seraAdministrador;
+
+            confirmarSenha.required = (
+                seraAdministrador &&
+                !contaAdministrativaExistente
+            );
+        }
+
+        if (!seraAdministrador) {
+            if (senhaAdmin) {
+                senhaAdmin.value = "";
+            }
+
+            if (confirmarSenha) {
+                confirmarSenha.value = "";
+            }
+
+            if (usuarioAdmin) {
+                usuarioAdmin.value = "";
+            }
+        }
     }
 
-    categoria.addEventListener("change", atualizarCredenciais);
+    if (categoria && masterLogado) {
+        categoria.addEventListener("change", atualizarCampos);
+    }
 
-    atualizarCredenciais();
+    if (senhaAdmin && confirmarSenha) {
+        senhaAdmin.addEventListener("input", function () {
+            if (contaAdministrativaExistente) {
+                confirmarSenha.required = (
+                    senhaAdmin.value.length > 0
+                );
+            }
+        });
+    }
 
+    if (formulario) {
+        formulario.addEventListener("submit", function (event) {
+            const cargoSelecionado = categoria
+                ? categoria.value
+                : "membro";
+
+            const seraAdministrador = (
+                cargoSelecionado === "administrador" ||
+                cargoSelecionado === "master"
+            );
+
+            if (!seraAdministrador) {
+                return;
+            }
+
+            if (
+                senhaAdmin &&
+                confirmarSenha &&
+                senhaAdmin.value !== confirmarSenha.value
+            ) {
+                event.preventDefault();
+                alert("As senhas informadas não coincidem.");
+                confirmarSenha.focus();
+                return;
+            }
+
+            if (
+                senhaAdmin &&
+                senhaAdmin.value.length > 0 &&
+                senhaAdmin.value.length < 8
+            ) {
+                event.preventDefault();
+                alert("A senha deve possuir pelo menos 8 caracteres.");
+                senhaAdmin.focus();
+                return;
+            }
+
+            if (
+                !contaAdministrativaExistente &&
+                senhaAdmin &&
+                !senhaAdmin.value
+            ) {
+                event.preventDefault();
+                alert("Informe uma senha para a conta administrativa.");
+                senhaAdmin.focus();
+            }
+        });
+    }
+
+    atualizarCampos();
 });
 </script>
-{% endif %}
 
 {% endblock %}
