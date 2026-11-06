@@ -61,6 +61,39 @@
             >
         </div>
 
+        {% if master_logado %}
+        <div class="admin-form-field">
+            <label for="perfil">Cargo</label>
+            <select id="perfil" name="perfil" required>
+                <option
+                    value="membro"
+                    {% if cargo_selecionado == 'membro' %}selected{% endif %}
+                >
+                    Membro
+                </option>
+
+                <option
+                    value="administrador"
+                    {% if cargo_selecionado == 'administrador' %}selected{% endif %}
+                >
+                    Administrador (ADM)
+                </option>
+
+                <option
+                    value="master"
+                    {% if cargo_selecionado == 'master' %}selected{% endif %}
+                >
+                    MASTER
+                </option>
+            </select>
+
+            <small>
+                Ao selecionar Membro, a conta perderá o acesso ao painel,
+                mas continuará ativa como usuário comum.
+            </small>
+        </div>
+        {% endif %}
+
         <div class="admin-form-divider">
             <h4>Alteração de senha</h4>
             <p>Deixe os campos vazios para manter a senha atual.</p>
