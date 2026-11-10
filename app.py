@@ -428,9 +428,9 @@ def registrar_abertura_remota(
     id_dispositivo=None
 ):
     """
-    Registra a tentativa de abertura remota em tabela separada.
-    Não altera registros_acesso, que permanece reservado aos eventos
-    recebidos do iDFace.
+    Registra a abertura remota e cria seu ID compartilhado na mesma
+    transação. Se qualquer uma das duas gravações falhar, ambas são
+    desfeitas para não deixar registros sem identificador.
     """
     conexao = None
     cursor = None
@@ -460,13 +460,38 @@ def registrar_abertura_remota(
             )
         )
 
+        id_abertura_remota = cursor.lastrowid
+
+        cursor.execute(
+            """
+            INSERT INTO identificadores_historico_acessos (
+                tipo_registro,
+                id_registro_origem
+            )
+            VALUES ('remoto', %s)
+            """,
+            (id_abertura_remota,)
+        )
+
+        id_compartilhado = cursor.lastrowid
         conexao.commit()
 
-    except mysql.connector.Error as erro:
         print(
-            f"Falha ao registrar auditoria da abertura remota: {erro}",
+            f"Abertura remota registrada: origem={id_abertura_remota} | "
+            f"ID compartilhado={id_compartilhado} | resultado={resultado}",
             flush=True
         )
+        return id_compartilhado
+
+    except mysql.connector.Error as erro:
+        if conexao:
+            conexao.rollback()
+
+        print(
+            f"Falha ao registrar auditoria/ID compartilhado da abertura remota: {erro}",
+            flush=True
+        )
+        return None
 
     finally:
         if cursor:
@@ -662,7 +687,7 @@ def abrir_porta_remota():
             "Comando de abertura remota enviado ao iDFace."
         )
 
-        registrar_abertura_remota(
+        id_compartilhado = registrar_abertura_remota(
             administrador["id"],
             administrador["nome"],
             "sucesso",
@@ -670,11 +695,18 @@ def abrir_porta_remota():
             id_dispositivo
         )
 
-        flash(
-            "Comando de abertura enviado ao iDFace. "
-            "Porta Aberta.",
-            "sucesso"
-        )
+        if id_compartilhado is None:
+            flash(
+                "O comando foi enviado ao iDFace, mas não foi possível "
+                "registrar a abertura e gerar seu ID no histórico. "
+                "Verifique o banco de dados.",
+                "erro"
+            )
+        else:
+            flash(
+                "Comando de abertura enviado ao iDFace. Porta Aberta.",
+                "sucesso"
+            )
 
     except Exception as erro:
         detalhe = str(erro) or "Falha não identificada no acionamento."
@@ -827,6 +859,18 @@ def usuarios():
 
         lista_usuarios = cursor.fetchall()
 
+        print(
+            "[DIAGNOSTICO REGISTROS REMOTOS]",
+            [
+                {
+                    "id": registro.get("id"),
+                    "nome_administrador": registro.get("nome_administrador"),
+                    "tipo": type(registro).__name__
+                }
+                for registro in registros_remotos
+            ],
+            flush=True
+        )
         return render_template(
             "usuarios.html",
             usuarios=lista_usuarios,
@@ -885,6 +929,7 @@ def registros_acesso():
         cursor = conexao.cursor(dictionary=True)
 
         # Eventos de acesso registrados pelo equipamento iDFace.
+        # O identificador exibido vem da sequência global compartilhada.
         consulta_faciais = """
             SELECT
                 r.id,
@@ -893,10 +938,14 @@ def registros_acesso():
                 r.data_hora,
                 r.evento,
                 r.dispositivo_id,
+                h.id AS id_compartilhado,
                 u.nome AS nome_usuario
             FROM registros_acesso r
             LEFT JOIN usuarios u
                 ON r.id_usuario = u.id
+            LEFT JOIN identificadores_historico_acessos h
+                ON h.tipo_registro = 'facial'
+               AND h.id_registro_origem = r.id
             WHERE 1 = 1
         """
 
@@ -925,7 +974,11 @@ def registros_acesso():
                 **registro,
                 "tipo_registro": "facial",
                 "origem": "Acesso facial",
-                "identificador": f"FAC-{registro['id']}",
+                "identificador": (
+                    str(registro["id_compartilhado"])
+                    if registro.get("id_compartilhado") is not None
+                    else "-"
+                ),
                 "nome_exibicao": nome,
                 "resultado_exibicao": (
                     f"Evento {evento}" if evento is not None else "-"
@@ -934,6 +987,7 @@ def registros_acesso():
             })
 
         # Comandos de abertura remota solicitados por administradores.
+        # O JOIN recupera o mesmo contador global usado pelos eventos faciais.
         consulta_remotas = """
             SELECT
                 a.id,
@@ -942,8 +996,12 @@ def registros_acesso():
                 a.data_hora,
                 a.resultado,
                 a.detalhe,
-                a.id_dispositivo
+                a.id_dispositivo,
+                h.id AS id_compartilhado
             FROM aberturas_remotas a
+            LEFT JOIN identificadores_historico_acessos h
+                ON h.tipo_registro = 'remoto'
+               AND h.id_registro_origem = a.id
             WHERE 1 = 1
         """
 
@@ -980,7 +1038,11 @@ def registros_acesso():
                 "nome_usuario": nome,
                 "tipo_registro": "remoto",
                 "origem": "Abertura remota",
-                "identificador": f"REM-{registro['id']}",
+                "identificador": (
+                    str(registro["id_compartilhado"])
+                    if registro.get("id_compartilhado") is not None
+                    else "-"
+                ),
                 "nome_exibicao": nome,
                 "resultado_exibicao": (
                     "Comando enviado" if sucesso else "Falha no comando"
