@@ -2,7 +2,6 @@
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Registros de Acesso{% endblock %}
-
 {% block main_class %}records-page{% endblock %}
 
 {% block extra_css %}
@@ -10,11 +9,10 @@
 {% endblock %}
 
 {% block content %}
-
 <header class="content-header records-page-header">
     <div>
         <h2>Registros de acesso</h2>
-        <p>Consulte o histórico de acessos registrados pelo equipamento.</p>
+        <p>Consulte o histórico de acessos faciais e comandos de abertura remota.</p>
     </div>
 </header>
 
@@ -23,58 +21,39 @@
 {% endif %}
 
 <section class="records-filters-container">
-
     <div class="records-section-heading">
         <h3>Consultar registros</h3>
         <p>Utilize os filtros para localizar um acesso específico.</p>
     </div>
 
     <form method="GET" action="{{ url_for('registros_acesso') }}">
-
         <div class="records-filter-field records-search-field">
-            <label for="q">Nome do usuário</label>
-            <input
-                type="search"
-                id="q"
-                name="q"
-                placeholder="Pesquisar pelo nome..."
-                value="{{ pesquisa }}"
-            >
+            <label for="q">Usuário ou administrador</label>
+            <input type="search" id="q" name="q"
+                   placeholder="Pesquisar pelo nome..."
+                   value="{{ pesquisa }}">
         </div>
 
         <div class="records-filter-field">
             <label for="data_inicio">Data inicial</label>
-            <input
-                type="date"
-                id="data_inicio"
-                name="data_inicio"
-                value="{{ data_inicio }}"
-            >
+            <input type="date" id="data_inicio" name="data_inicio"
+                   value="{{ data_inicio }}">
         </div>
 
         <div class="records-filter-field">
             <label for="data_fim">Data final</label>
-            <input
-                type="date"
-                id="data_fim"
-                name="data_fim"
-                value="{{ data_fim }}"
-            >
+            <input type="date" id="data_fim" name="data_fim"
+                   value="{{ data_fim }}">
         </div>
 
         <div class="records-filter-buttons">
             <button type="submit" class="btn-filter">Pesquisar</button>
-            <a href="{{ url_for('registros_acesso') }}" class="btn-clear">
-                Limpar filtros
-            </a>
+            <a href="{{ url_for('registros_acesso') }}" class="btn-clear">Limpar filtros</a>
         </div>
-
     </form>
-
 </section>
 
 <section class="records-table-container">
-
     <div class="records-table-header">
         <div>
             <h3>Histórico de acessos</h3>
@@ -83,72 +62,75 @@
     </div>
 
     <div class="records-table-responsive">
-
         <table class="records-table">
-
             <thead>
                 <tr>
                     <th class="column-id">ID</th>
-                    <th class="column-user">Usuário</th>
+                    <th class="column-user">Usuário / responsável</th>
                     <th class="column-date">Data e horário</th>
-                    <th class="column-event">Evento</th>
-                    <th class="column-device">Dispositivo</th>
+                    <th class="column-origin">Origem</th>
+                    <th class="column-event">Evento / resultado</th>
                 </tr>
             </thead>
-
             <tbody>
-
                 {% for registro in registros %}
-                    <tr>
-                        <td class="record-id">{{ registro.id }}</td>
+                <tr>
+                    <td class="record-id">{{ registro.identificador }}</td>
 
-                        <td class="record-user">
-                            {% if registro.nome_usuario %}
-                                {{ registro.nome_usuario }}
+                    <td class="record-user">
+                        {% if registro.nome_exibicao %}
+                            {{ registro.nome_exibicao }}
+                        {% else %}
+                            <span class="unknown-user">Não identificado</span>
+                        {% endif %}
+                    </td>
+
+                    <td class="record-date">
+                        {% if registro.data_hora %}
+                            {{ registro.data_hora.strftime('%d/%m/%Y') }}
+                            <span class="record-time">{{ registro.data_hora.strftime('%H:%M:%S') }}</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td class="column-origin">
+                        {% if registro.tipo_registro == "remoto" %}
+                            <span class="origin-badge origin-remote">Abertura remota</span>
+                        {% else %}
+                            <span class="origin-badge origin-facial">Acesso facial</span>
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if registro.tipo_registro == "remoto" %}
+                            {% if registro.resultado_exibicao == "Comando enviado" %}
+                                <span class="result-badge result-success">Comando enviado</span>
                             {% else %}
-                                <span class="unknown-user">Usuário não identificado</span>
+                                <span class="result-badge result-failure">Falha no comando</span>
                             {% endif %}
-                        </td>
-
-                        <td class="record-date">
-                            {% if registro.data_hora %}
-                                {{ registro.data_hora.strftime('%d/%m/%Y') }}
-                                <span class="record-time">
-                                    {{ registro.data_hora.strftime('%H:%M:%S') }}
-                                </span>
-                            {% else %}
-                                -
+                            {% if registro.detalhe_exibicao %}
+                                <small class="record-detail">{{ registro.detalhe_exibicao }}</small>
                             {% endif %}
-                        </td>
-
-                        <td>
+                        {% else %}
                             {% if registro.evento is not none %}
-                                <span class="event-code">{{ registro.evento }}</span>
+                                <span class="event-code">{{ registro.resultado_exibicao }}</span>
                             {% else %}
                                 -
                             {% endif %}
-                        </td>
-
-                        <td class="record-device">
-                            {{ registro.dispositivo_id if registro.dispositivo_id is not none else '-' }}
-                        </td>
-                    </tr>
-
+                        {% endif %}
+                    </td>
+                </tr>
                 {% else %}
-                    <tr>
-                        <td colspan="5" class="records-empty">
-                            <span>Nenhum registro de acesso encontrado.</span>
-                            <small>Altere os filtros ou tente outra pesquisa.</small>
-                        </td>
-                    </tr>
+                <tr>
+                    <td colspan="5" class="records-empty">
+                        <span>Nenhum registro de acesso encontrado.</span>
+                        <small>Altere os filtros ou tente outra pesquisa.</small>
+                    </td>
+                </tr>
                 {% endfor %}
-
             </tbody>
-
         </table>
-
     </div>
-
 </section>
-
 {% endblock %}

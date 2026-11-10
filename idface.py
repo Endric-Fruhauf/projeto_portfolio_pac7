@@ -270,6 +270,20 @@ class IDFaceClient:
             "consulta de departamentos"
         )
 
+    def consultar_vinculos_departamentos(self):
+        """Consulta os vínculos entre usuários e departamentos no iDFace."""
+
+        resultado = self.requisicao(
+            "load_objects.fcgi",
+            {"object": "user_groups"}
+        )
+
+        return self._validar_lista_resposta(
+            resultado,
+            "user_groups",
+            "consulta de vínculos entre usuários e departamentos"
+        )
+
     def associar_departamento_padrao(self, id_idface):
         """
         Associa o usuário ao departamento PADRÃO.
@@ -321,16 +335,7 @@ class IDFaceClient:
                 "O iDFace retornou um ID inválido para o departamento PADRÃO."
             )
 
-        resultado = self.requisicao(
-            "load_objects.fcgi",
-            {"object": "user_groups"}
-        )
-
-        vinculos = self._validar_lista_resposta(
-            resultado,
-            "user_groups",
-            "consulta de vínculos entre usuários e departamentos"
-        )
+        vinculos = self.consultar_vinculos_departamentos()
 
         ja_associado = any(
             str(vinculo.get("user_id")) == str(id_idface)
@@ -456,6 +461,20 @@ class IDFaceClient:
             )
 
             resposta.raise_for_status()
+
+            # Alguns firmwares retornam erros de operação no corpo JSON,
+            # mesmo quando o status HTTP é 200.
+            if resposta.content:
+                try:
+                    resultado = resposta.json()
+                except ValueError:
+                    resultado = None
+
+                if isinstance(resultado, dict) and "error" in resultado:
+                    raise IDFaceError(
+                        f"O iDFace recusou a restauração da foto: "
+                        f"{resultado['error']}"
+                    )
 
             return True
 

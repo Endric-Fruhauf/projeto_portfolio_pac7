@@ -278,6 +278,30 @@ def _salvar_registro(cursor, registro, resultado_sync):
     else:
         resultado_sync["atualizados"] += 1
 
+    # Usa o ID interno de registros_acesso como referência na tabela
+    # compartilhada. O INSERT IGNORE impede duplicação em sincronizações
+    # repetidas do mesmo evento do iDFace.
+    cursor.execute(
+        """
+        SELECT id
+        FROM registros_acesso
+        WHERE id_idface = %s
+        LIMIT 1
+        """,
+        (id_registro,)
+    )
+    registro_mysql = cursor.fetchone()
+
+    if registro_mysql:
+        cursor.execute(
+            """
+            INSERT IGNORE INTO identificadores_historico_acessos
+                (tipo_registro, id_registro_origem)
+            VALUES ('facial', %s)
+            """,
+            (registro_mysql[0],)
+        )
+
     cursor.execute(
         """
         DELETE FROM registros_acesso_pendentes

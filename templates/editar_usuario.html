@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Wickedbotz - Editar Usuário{% endblock %}
@@ -8,7 +7,6 @@
 {% endblock %}
 
 {% block content %}
-
 <header class="content-header">
     <div>
         <h2>Editar usuário</h2>
@@ -17,331 +15,209 @@
 </header>
 
 <section class="edit-user-container">
+    <div class="edit-user-profile">
+        <div class="edit-user-photo" id="foto-facial-preview-container">
+            {% if foto_facial %}
+                <img id="foto-facial-preview" src="{{ foto_facial }}" alt="Foto facial de {{ usuario.nome }}">
+            {% else %}
+                <div class="edit-user-photo-placeholder" id="foto-facial-placeholder">
+                    <span>Sem foto</span>
+                </div>
+                <img id="foto-facial-preview" class="edit-user-photo-hidden" alt="Prévia da nova foto facial">
+            {% endif %}
+        </div>
+
+        <div class="edit-user-profile-info">
+            <h3>{{ usuario.nome }}</h3>
+            <p>Foto facial utilizada pelo iDFace para reconhecimento.</p>
+        </div>
+    </div>
+
+    {% with mensagens = get_flashed_messages(with_categories=true) %}
+        {% if mensagens %}
+            {% for categoria_mensagem, mensagem in mensagens %}
+                <div class="edit-user-message {{ 'edit-user-error' if categoria_mensagem == 'erro' else 'edit-user-success' }}">
+                    {{ mensagem }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
 
     {% if erro %}
-        <div class="edit-user-error">
-            {{ erro }}
-        </div>
+        <div class="edit-user-error">{{ erro }}</div>
     {% endif %}
 
-    <form
-        method="POST"
-        action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
-        class="edit-user-form"
-        id="form-editar-usuario"
-    >
+    <section class="edit-user-photo-upload">
+        <div class="edit-user-section-heading">
+            <h3>Atualizar foto facial</h3>
+            <p>A nova imagem será enviada ao iDFace e armazenada no MySQL. Ela passará a ser utilizada no reconhecimento facial.</p>
+        </div>
 
+        <form method="POST"
+              action="{{ url_for('atualizar_foto_facial', id_usuario=usuario.id) }}"
+              enctype="multipart/form-data"
+              class="edit-user-upload-form"
+              id="form-foto-facial">
+            <div class="edit-user-field">
+                <label for="foto_facial">Selecionar foto do computador</label>
+                <input type="file"
+                       id="foto_facial"
+                       name="foto_facial"
+                       accept=".jpg,.jpeg,image/jpeg"
+                       required>
+                <small class="edit-user-help">Formato aceito: JPG/JPEG. Tamanho máximo: 5 MB. Prefira uma foto frontal, nítida e com boa iluminação.</small>
+            </div>
+
+            <div class="edit-user-upload-actions">
+                <button type="submit" class="btn-primary" id="btn-enviar-foto">Enviar e atualizar foto</button>
+                <span id="foto-facial-nome" class="edit-user-file-name">Nenhum arquivo selecionado.</span>
+            </div>
+        </form>
+    </section>
+
+    <form method="POST"
+          action="{{ url_for('editar_usuario', id_usuario=usuario.id) }}"
+          class="edit-user-form"
+          id="form-editar-usuario">
         <div class="edit-user-field">
             <label for="id_usuario">ID do usuário</label>
-            <input
-                type="text"
-                id="id_usuario"
-                value="{{ usuario.id }}"
-                disabled
-            >
+            <input type="text" id="id_usuario" value="{{ usuario.id }}" disabled>
         </div>
 
         <div class="edit-user-field">
             <label for="id_idface">ID iDFace</label>
-            <input
-                type="text"
-                id="id_idface"
-                value="{{ usuario.id_idface if usuario.id_idface is not none else '-' }}"
-                disabled
-            >
+            <input type="text" id="id_idface" value="{{ usuario.id_idface if usuario.id_idface is not none else '-' }}" disabled>
         </div>
 
         <div class="edit-user-field">
             <label for="nome">Nome completo</label>
-            <input
-                type="text"
-                id="nome"
-                name="nome"
-                value="{{ usuario.nome }}"
-                maxlength="150"
-                required
-                autocomplete="name"
-            >
+            <input type="text" id="nome" name="nome" value="{{ usuario.nome }}" maxlength="150" required autocomplete="name">
         </div>
 
         <div class="edit-user-field">
             <label for="categoria">Cargo / categoria</label>
-
             {% if master_logado %}
-
-                <select
-                    id="categoria"
-                    name="categoria"
-                    required
-                >
-                    <option
-                        value="membro"
-                        {% if categoria_selecionada == 'membro' %}selected{% endif %}
-                    >
-                        Membro
-                    </option>
-
-                    <option
-                        value="administrador"
-                        {% if categoria_selecionada == 'administrador' %}selected{% endif %}
-                    >
-                        Administrador
-                    </option>
-
-                    <option
-                        value="master"
-                        {% if categoria_selecionada == 'master' %}selected{% endif %}
-                    >
-                        MASTER
-                    </option>
+                <select id="categoria" name="categoria" required>
+                    <option value="membro" {% if categoria_selecionada == 'membro' %}selected{% endif %}>Membro</option>
+                    <option value="administrador" {% if categoria_selecionada == 'administrador' %}selected{% endif %}>Administrador</option>
+                    <option value="master" {% if categoria_selecionada == 'master' %}selected{% endif %}>MASTER</option>
                 </select>
-
-                <small class="edit-user-help">
-                    Somente contas MASTER podem alterar o cargo de usuários e administradores.
-                </small>
-
+                <small class="edit-user-help">Somente contas MASTER podem alterar o cargo de usuários e administradores.</small>
             {% else %}
-
-                <input
-                    type="text"
-                    value="Membro"
-                    disabled
-                >
-
-                <small class="edit-user-help">
-                    Administradores comuns podem editar os dados dos membros, mas não podem alterar cargos.
-                </small>
-
+                <input type="text" value="Membro" disabled>
+                <small class="edit-user-help">Administradores comuns podem editar os dados dos membros, mas não podem alterar cargos.</small>
             {% endif %}
         </div>
 
-        <div
-            id="credenciais-administrativas"
-            class="edit-user-credentials"
-        >
-
+        <div id="credenciais-administrativas" class="edit-user-credentials">
             <div class="edit-user-section-heading">
                 <h3>Credenciais do painel</h3>
-                <p>
-                    Defina os dados utilizados para acessar o painel administrativo.
-                </p>
+                <p>Defina os dados utilizados para acessar o painel administrativo.</p>
             </div>
 
             <div class="edit-user-field">
                 <label for="usuario_admin">Usuário do painel</label>
-                <input
-                    type="text"
-                    id="usuario_admin"
-                    name="usuario_admin"
-                    value="{{ usuario_admin or '' }}"
-                    maxlength="100"
-                    autocomplete="username"
-                >
+                <input type="text" id="usuario_admin" name="usuario_admin" value="{{ usuario_admin or '' }}" maxlength="100" autocomplete="username">
             </div>
 
             <div class="edit-user-field">
-                <label for="senha_admin">
-                    {% if conta_administrativa_existente %}
-                        Nova senha
-                    {% else %}
-                        Senha
-                    {% endif %}
-                </label>
-
-                <input
-                    type="password"
-                    id="senha_admin"
-                    name="senha_admin"
-                    minlength="8"
-                    autocomplete="new-password"
-                >
-
+                <label for="senha_admin">{% if conta_administrativa_existente %}Nova senha{% else %}Senha{% endif %}</label>
+                <input type="password" id="senha_admin" name="senha_admin" minlength="8" autocomplete="new-password">
                 {% if conta_administrativa_existente %}
-                    <small class="edit-user-help">
-                        Deixe em branco para manter a senha atual. Para alterá-la, informe uma nova senha e confirme abaixo.
-                    </small>
+                    <small class="edit-user-help">Deixe em branco para manter a senha atual. Para alterá-la, informe uma nova senha e confirme abaixo.</small>
                 {% else %}
-                    <small class="edit-user-help">
-                        A senha deve possuir pelo menos 8 caracteres.
-                    </small>
+                    <small class="edit-user-help">A senha deve possuir pelo menos 8 caracteres.</small>
                 {% endif %}
             </div>
 
             <div class="edit-user-field">
-                <label for="confirmar_senha">
-                    Confirmar senha
-                </label>
-
-                <input
-                    type="password"
-                    id="confirmar_senha"
-                    name="confirmar_senha"
-                    minlength="8"
-                    autocomplete="new-password"
-                >
-
-                <small class="edit-user-help">
-                    Confirme a senha informada acima.
-                </small>
+                <label for="confirmar_senha">Confirmar senha</label>
+                <input type="password" id="confirmar_senha" name="confirmar_senha" minlength="8" autocomplete="new-password">
+                <small class="edit-user-help">Confirme a senha informada acima.</small>
             </div>
 
             {% if conta_administrativa_existente %}
-                <div class="edit-user-password-notice">
-                    A senha atual não é exibida por segurança. Se não desejar alterá-la, deixe os dois campos de senha vazios.
-                </div>
+                <div class="edit-user-password-notice">A senha atual não é exibida por segurança. Se não desejar alterá-la, deixe os dois campos de senha vazios.</div>
             {% endif %}
-
         </div>
 
         <div class="edit-user-actions">
-            <button
-                type="submit"
-                class="btn-primary"
-            >
-                Salvar alterações
-            </button>
-
-            <a
-                href="{{ url_for('usuarios') }}"
-                class="btn-secondary"
-            >
-                Cancelar
-            </a>
+            <button type="submit" class="btn-primary">Salvar alterações</button>
+            <a href="{{ url_for('usuarios') }}" class="btn-secondary">Cancelar</a>
         </div>
-
     </form>
-
 </section>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const categoria = document.getElementById("categoria");
     const credenciais = document.getElementById("credenciais-administrativas");
-
     const usuarioAdmin = document.getElementById("usuario_admin");
     const senhaAdmin = document.getElementById("senha_admin");
     const confirmarSenha = document.getElementById("confirmar_senha");
-
     const formulario = document.getElementById("form-editar-usuario");
+    const inputFoto = document.getElementById("foto_facial");
+    const previewFoto = document.getElementById("foto-facial-preview");
+    const placeholderFoto = document.getElementById("foto-facial-placeholder");
+    const nomeArquivo = document.getElementById("foto-facial-nome");
+    const formularioFoto = document.getElementById("form-foto-facial");
+    const botaoFoto = document.getElementById("btn-enviar-foto");
 
-    const contaAdministrativaExistente =
-        {{ 'true' if conta_administrativa_existente else 'false' }};
-
-    const masterLogado =
-        {{ 'true' if master_logado else 'false' }};
+    const contaAdministrativaExistente = {{ 'true' if conta_administrativa_existente else 'false' }};
+    const masterLogado = {{ 'true' if master_logado else 'false' }};
 
     function atualizarCampos() {
-        const cargoSelecionado = categoria
-            ? categoria.value
-            : "membro";
+        const cargoSelecionado = categoria ? categoria.value : "membro";
+        const seraAdministrador = cargoSelecionado === "administrador" || cargoSelecionado === "master";
+        if (!credenciais) return;
 
-        const seraAdministrador = (
-            cargoSelecionado === "administrador" ||
-            cargoSelecionado === "master"
-        );
-
-        if (!credenciais) {
-            return;
-        }
-
-        credenciais.style.display = seraAdministrador
-            ? "flex"
-            : "none";
-
+        credenciais.style.display = seraAdministrador ? "flex" : "none";
         if (usuarioAdmin) {
             usuarioAdmin.disabled = !seraAdministrador;
             usuarioAdmin.required = seraAdministrador;
         }
-
         if (senhaAdmin) {
             senhaAdmin.disabled = !seraAdministrador;
-
-            senhaAdmin.required = (
-                seraAdministrador &&
-                !contaAdministrativaExistente
-            );
+            senhaAdmin.required = seraAdministrador && !contaAdministrativaExistente;
         }
-
         if (confirmarSenha) {
             confirmarSenha.disabled = !seraAdministrador;
-
-            confirmarSenha.required = (
-                seraAdministrador &&
-                !contaAdministrativaExistente
-            );
+            confirmarSenha.required = seraAdministrador && !contaAdministrativaExistente;
         }
-
         if (!seraAdministrador) {
-            if (senhaAdmin) {
-                senhaAdmin.value = "";
-            }
-
-            if (confirmarSenha) {
-                confirmarSenha.value = "";
-            }
-
-            if (usuarioAdmin) {
-                usuarioAdmin.value = "";
-            }
+            if (senhaAdmin) senhaAdmin.value = "";
+            if (confirmarSenha) confirmarSenha.value = "";
+            if (usuarioAdmin) usuarioAdmin.value = "";
         }
     }
 
-    if (categoria && masterLogado) {
-        categoria.addEventListener("change", atualizarCampos);
-    }
+    if (categoria && masterLogado) categoria.addEventListener("change", atualizarCampos);
 
     if (senhaAdmin && confirmarSenha) {
         senhaAdmin.addEventListener("input", function () {
-            if (contaAdministrativaExistente) {
-                confirmarSenha.required = (
-                    senhaAdmin.value.length > 0
-                );
-            }
+            if (contaAdministrativaExistente) confirmarSenha.required = senhaAdmin.value.length > 0;
         });
     }
 
     if (formulario) {
         formulario.addEventListener("submit", function (event) {
-            const cargoSelecionado = categoria
-                ? categoria.value
-                : "membro";
+            const cargoSelecionado = categoria ? categoria.value : "membro";
+            const seraAdministrador = cargoSelecionado === "administrador" || cargoSelecionado === "master";
+            if (!seraAdministrador) return;
 
-            const seraAdministrador = (
-                cargoSelecionado === "administrador" ||
-                cargoSelecionado === "master"
-            );
-
-            if (!seraAdministrador) {
-                return;
-            }
-
-            if (
-                senhaAdmin &&
-                confirmarSenha &&
-                senhaAdmin.value !== confirmarSenha.value
-            ) {
+            if (senhaAdmin && confirmarSenha && senhaAdmin.value !== confirmarSenha.value) {
                 event.preventDefault();
                 alert("As senhas informadas não coincidem.");
                 confirmarSenha.focus();
                 return;
             }
-
-            if (
-                senhaAdmin &&
-                senhaAdmin.value.length > 0 &&
-                senhaAdmin.value.length < 8
-            ) {
+            if (senhaAdmin && senhaAdmin.value.length > 0 && senhaAdmin.value.length < 8) {
                 event.preventDefault();
                 alert("A senha deve possuir pelo menos 8 caracteres.");
                 senhaAdmin.focus();
                 return;
             }
-
-            if (
-                !contaAdministrativaExistente &&
-                senhaAdmin &&
-                !senhaAdmin.value
-            ) {
+            if (!contaAdministrativaExistente && senhaAdmin && !senhaAdmin.value) {
                 event.preventDefault();
                 alert("Informe uma senha para a conta administrativa.");
                 senhaAdmin.focus();
@@ -349,8 +225,48 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    if (inputFoto) {
+        inputFoto.addEventListener("change", function () {
+            const arquivo = inputFoto.files && inputFoto.files[0];
+            if (!arquivo) {
+                if (nomeArquivo) nomeArquivo.textContent = "Nenhum arquivo selecionado.";
+                return;
+            }
+            if (nomeArquivo) nomeArquivo.textContent = arquivo.name;
+            if (arquivo.size > 5 * 1024 * 1024) {
+                alert("A foto deve ter no máximo 5 MB.");
+                inputFoto.value = "";
+                if (nomeArquivo) nomeArquivo.textContent = "Nenhum arquivo selecionado.";
+                return;
+            }
+            if (arquivo.type !== "image/jpeg") {
+                alert("Selecione uma imagem JPG/JPEG válida.");
+                inputFoto.value = "";
+                if (nomeArquivo) nomeArquivo.textContent = "Nenhum arquivo selecionado.";
+                return;
+            }
+            const leitor = new FileReader();
+            leitor.onload = function (evento) {
+                if (previewFoto) {
+                    previewFoto.src = evento.target.result;
+                    previewFoto.classList.remove("edit-user-photo-hidden");
+                }
+                if (placeholderFoto) placeholderFoto.style.display = "none";
+            };
+            leitor.readAsDataURL(arquivo);
+        });
+    }
+
+    if (formularioFoto) {
+        formularioFoto.addEventListener("submit", function () {
+            if (botaoFoto) {
+                botaoFoto.disabled = true;
+                botaoFoto.textContent = "Enviando foto...";
+            }
+        });
+    }
+
     atualizarCampos();
 });
 </script>
-
 {% endblock %}

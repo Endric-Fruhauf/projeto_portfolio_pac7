@@ -1,4 +1,3 @@
-
 from flask import Flask, render_template, request, redirect, url_for, session, flash
 import mysql.connector
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -9,6 +8,8 @@ import time
 import math
 import secrets
 import hmac
+import base64
+import binascii
 
 from idface import IDFaceClient, IDFaceError
 from servidor import iniciar_servidor
@@ -31,6 +32,7 @@ DEBUG = os.getenv("FLASK_DEBUG", "false").lower() in (
 )
 
 app.config.update(
+    MAX_CONTENT_LENGTH=6 * 1024 * 1024,
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=False,
@@ -120,6 +122,57 @@ def conectar_banco():
         password=config.MYSQL_SENHA,
         database=config.MYSQL_BANCO
     )
+
+
+def obter_foto_facial_data_uri(cursor, id_usuario):
+    """Retorna a foto facial local como Data URI, sem consultar o iDFace."""
+    cursor.execute(
+        """
+        SELECT imagem
+        FROM fotos_faciais
+        WHERE id_usuario = %s
+        LIMIT 1
+        """,
+        (id_usuario,)
+    )
+
+    resultado = cursor.fetchone()
+    if not resultado or not resultado.get("imagem"):
+        return None
+
+    imagem = resultado["imagem"]
+
+    if isinstance(imagem, bytes):
+        imagem = imagem.decode("ascii", errors="ignore")
+
+    imagem = imagem.strip()
+    if not imagem:
+        return None
+
+    if imagem.startswith("data:image/"):
+        return imagem
+
+    imagem = "".join(imagem.split())
+
+    try:
+        dados = base64.b64decode(imagem, validate=True)
+    except (binascii.Error, ValueError, TypeError):
+        print(
+            f"Foto facial inválida no banco para o usuário {id_usuario}.",
+            flush=True
+        )
+        return None
+
+    if dados.startswith(b"\xff\xd8\xff"):
+        mime = "image/jpeg"
+    elif dados.startswith(b"\x89PNG\r\n\x1a\n"):
+        mime = "image/png"
+    elif dados[:4] == b"RIFF" and dados[8:12] == b"WEBP":
+        mime = "image/webp"
+    else:
+        mime = "image/jpeg"
+
+    return f"data:{mime};base64,{imagem}"
 
 
 # =====================================
@@ -808,6 +861,7 @@ def usuarios():
 
 
 # =====================================
+# =====================================
 # REGISTROS DE ACESSO
 # =====================================
 
@@ -830,7 +884,8 @@ def registros_acesso():
         conexao = conectar_banco()
         cursor = conexao.cursor(dictionary=True)
 
-        consulta = """
+        # Eventos de acesso registrados pelo equipamento iDFace.
+        consulta_faciais = """
             SELECT
                 r.id,
                 r.id_idface,
@@ -845,33 +900,102 @@ def registros_acesso():
             WHERE 1 = 1
         """
 
-        parametros = []
+        parametros_faciais = []
 
         if pesquisa:
-            consulta += """
-                AND u.nome LIKE %s
-            """
-            parametros.append(f"%{pesquisa}%")
+            consulta_faciais += " AND u.nome LIKE %s"
+            parametros_faciais.append(f"%{pesquisa}%")
 
         if data_inicio:
-            consulta += """
-                AND DATE(r.data_hora) >= %s
-            """
-            parametros.append(data_inicio)
+            consulta_faciais += " AND DATE(r.data_hora) >= %s"
+            parametros_faciais.append(data_inicio)
 
         if data_fim:
-            consulta += """
-                AND DATE(r.data_hora) <= %s
-            """
-            parametros.append(data_fim)
+            consulta_faciais += " AND DATE(r.data_hora) <= %s"
+            parametros_faciais.append(data_fim)
 
-        consulta += """
-            ORDER BY r.data_hora DESC, r.id DESC
+        cursor.execute(consulta_faciais, tuple(parametros_faciais))
+        registros_faciais = cursor.fetchall()
+
+        for registro in registros_faciais:
+            nome = registro.get("nome_usuario") or "Usuário não identificado"
+            evento = registro.get("evento")
+
+            registros.append({
+                **registro,
+                "tipo_registro": "facial",
+                "origem": "Acesso facial",
+                "identificador": f"FAC-{registro['id']}",
+                "nome_exibicao": nome,
+                "resultado_exibicao": (
+                    f"Evento {evento}" if evento is not None else "-"
+                ),
+                "detalhe_exibicao": None
+            })
+
+        # Comandos de abertura remota solicitados por administradores.
+        consulta_remotas = """
+            SELECT
+                a.id,
+                a.id_administrador,
+                a.nome_administrador,
+                a.data_hora,
+                a.resultado,
+                a.detalhe,
+                a.id_dispositivo
+            FROM aberturas_remotas a
+            WHERE 1 = 1
         """
 
-        cursor.execute(consulta, tuple(parametros))
+        parametros_remotas = []
 
-        registros = cursor.fetchall()
+        if pesquisa:
+            consulta_remotas += " AND a.nome_administrador LIKE %s"
+            parametros_remotas.append(f"%{pesquisa}%")
+
+        if data_inicio:
+            consulta_remotas += " AND DATE(a.data_hora) >= %s"
+            parametros_remotas.append(data_inicio)
+
+        if data_fim:
+            consulta_remotas += " AND DATE(a.data_hora) <= %s"
+            parametros_remotas.append(data_fim)
+
+        cursor.execute(consulta_remotas, tuple(parametros_remotas))
+        registros_remotos = cursor.fetchall()
+
+        for registro in registros_remotos:
+            sucesso = (registro.get("resultado") or "").lower() == "sucesso"
+            nome = (
+                registro.get("nome_administrador")
+                or "Administrador não identificado"
+            )
+
+            registros.append({
+                "id": registro["id"],
+                "id_administrador": registro["id_administrador"],
+                "data_hora": registro["data_hora"],
+                "dispositivo_id": registro.get("id_dispositivo"),
+                "evento": None,
+                "nome_usuario": nome,
+                "tipo_registro": "remoto",
+                "origem": "Abertura remota",
+                "identificador": f"REM-{registro['id']}",
+                "nome_exibicao": nome,
+                "resultado_exibicao": (
+                    "Comando enviado" if sucesso else "Falha no comando"
+                ),
+                "detalhe_exibicao": registro.get("detalhe")
+            })
+
+        # Une os dois tipos de registro em ordem cronológica decrescente.
+        registros.sort(
+            key=lambda item: (
+                item.get("data_hora") is not None,
+                item.get("data_hora")
+            ),
+            reverse=True
+        )
 
         return render_template(
             "registros_acesso.html",
@@ -882,7 +1006,7 @@ def registros_acesso():
         )
 
     except mysql.connector.Error as erro:
-        print(f"Erro ao consultar registros de acesso: {erro}")
+        print(f"Erro ao consultar histórico de acessos: {erro}", flush=True)
 
         return render_template(
             "registros_acesso.html",
@@ -901,7 +1025,6 @@ def registros_acesso():
             conexao.close()
 
 
-# =====================================
 # CADASTRAR NOVO USUARIO
 # =====================================
 
@@ -1149,6 +1272,197 @@ def novo_usuario():
 
 
 # =====================================
+# ATUALIZAR FOTO FACIAL
+# =====================================
+
+@app.route("/usuarios/<int:id_usuario>/foto-facial", methods=["POST"])
+def atualizar_foto_facial(id_usuario):
+    """Atualiza a foto facial no iDFace e mantém uma cópia no MySQL."""
+
+    if not administrador_logado():
+        return redirect(url_for("login"))
+
+    arquivo = request.files.get("foto_facial")
+
+    if not arquivo or not arquivo.filename:
+        flash("Selecione uma foto JPG para enviar.", "erro")
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    # O endpoint de imagem do iDFace recebe a foto em formato binário.
+    # Para manter compatibilidade com o formato já utilizado pelo projeto,
+    # este envio aceita JPEG (JPG) e limita o arquivo a 5 MB.
+    tamanho_maximo = 5 * 1024 * 1024
+    imagem_bytes = arquivo.stream.read(tamanho_maximo + 1)
+
+    if not imagem_bytes:
+        flash("O arquivo selecionado está vazio.", "erro")
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    if len(imagem_bytes) > tamanho_maximo:
+        flash("A foto deve ter no máximo 5 MB.", "erro")
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    if not (
+        imagem_bytes.startswith(b"\xff\xd8\xff")
+        and b"\xff\xd9" in imagem_bytes[-32:]
+    ):
+        flash("Formato inválido. Envie uma imagem JPG/JPEG válida.", "erro")
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    conexao = None
+    cursor = None
+    foto_anterior = None
+    id_idface = None
+    nome_usuario = None
+    timestamp_novo = int(time.time())
+    imagem_base64 = base64.b64encode(imagem_bytes).decode("ascii")
+
+    try:
+        conexao = conectar_banco()
+        cursor = conexao.cursor(dictionary=True)
+
+        cursor.execute(
+            """
+            SELECT
+                u.id,
+                u.nome,
+                u.id_idface,
+                u.categoria,
+                u.ativo,
+                a.id AS id_administrador,
+                a.ativo AS administrador_ativo
+            FROM usuarios u
+            LEFT JOIN administradores a
+                ON a.id_usuario = u.id
+            WHERE u.id = %s
+              AND u.ativo = 1
+            LIMIT 1
+            FOR UPDATE
+            """,
+            (id_usuario,)
+        )
+
+        usuario = cursor.fetchone()
+
+        if not usuario or usuario["id_idface"] is None:
+            conexao.rollback()
+            flash("Usuário não encontrado ou sem vínculo com o iDFace.", "erro")
+            return redirect(url_for("usuarios"))
+
+        if usuario["categoria"] == "administrador":
+            if (
+                not master_logado()
+                or not usuario["id_administrador"]
+                or not usuario["administrador_ativo"]
+            ):
+                conexao.rollback()
+                flash("Você não tem permissão para alterar esta foto facial.", "erro")
+                return redirect(url_for("usuarios"))
+
+        cursor.execute(
+            """
+            SELECT timestamp_foto, imagem
+            FROM fotos_faciais
+            WHERE id_usuario = %s
+            LIMIT 1
+            """,
+            (id_usuario,)
+        )
+        foto_anterior = cursor.fetchone()
+
+        # Garante timestamp crescente mesmo se duas fotos forem enviadas
+        # dentro do mesmo segundo. O iDFace usa esse valor para versionar a imagem.
+        if foto_anterior and foto_anterior.get("timestamp_foto") is not None:
+            timestamp_novo = max(
+                timestamp_novo,
+                int(foto_anterior["timestamp_foto"]) + 1
+            )
+
+        id_idface = usuario["id_idface"]
+        nome_usuario = usuario["nome"]
+
+        # Primeiro atualiza o equipamento. Só grava a nova cópia local
+        # depois que o iDFace confirmar o recebimento da imagem.
+        with IDFaceClient() as idface:
+            idface.restaurar_foto_usuario(
+                id_idface,
+                timestamp_novo,
+                imagem_base64
+            )
+
+        if foto_anterior:
+            cursor.execute(
+                """
+                UPDATE fotos_faciais
+                SET timestamp_foto = %s,
+                    imagem = %s
+                WHERE id_usuario = %s
+                """,
+                (timestamp_novo, imagem_base64, id_usuario)
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO fotos_faciais
+                    (id_usuario, timestamp_foto, imagem)
+                VALUES (%s, %s, %s)
+                """,
+                (id_usuario, timestamp_novo, imagem_base64)
+            )
+
+        conexao.commit()
+
+        print(
+            f"Foto facial atualizada: {nome_usuario} | "
+            f"MySQL: {id_usuario} | iDFace: {id_idface}",
+            flush=True
+        )
+
+        flash("Foto facial atualizada com sucesso no iDFace e no MySQL.", "sucesso")
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    except (IDFaceError, mysql.connector.Error) as erro:
+        if conexao:
+            conexao.rollback()
+
+        print(
+            f"Erro ao atualizar foto facial do usuário {id_usuario}: {erro}",
+            flush=True
+        )
+
+        # Se o iDFace já recebeu a nova foto, tenta restaurar a versão
+        # anterior caso a gravação no MySQL tenha falhado.
+        if id_idface is not None and foto_anterior:
+            try:
+                with IDFaceClient() as idface:
+                    idface.restaurar_foto_usuario(
+                        id_idface,
+                        foto_anterior["timestamp_foto"],
+                        foto_anterior["imagem"]
+                    )
+            except IDFaceError as erro_compensacao:
+                print(
+                    "ATENÇÃO: não foi possível restaurar a foto anterior "
+                    f"no iDFace: {erro_compensacao}",
+                    flush=True
+                )
+
+        flash(
+            "Não foi possível atualizar a foto facial. "
+            "Verifique a comunicação com o iDFace e o banco de dados.",
+            "erro"
+        )
+        return redirect(url_for("editar_usuario", id_usuario=id_usuario))
+
+    finally:
+        if cursor:
+            cursor.close()
+
+        if conexao and conexao.is_connected():
+            conexao.close()
+
+
+# =====================================
 # EDITAR USUARIO / ADMINISTRADOR / MASTER
 # =====================================
 
@@ -1200,6 +1514,8 @@ def editar_usuario(id_usuario):
         if not usuario:
             return redirect(url_for("usuarios"))
 
+        foto_facial = obter_foto_facial_data_uri(cursor, id_usuario)
+
         eh_administrador = usuario["categoria"] == "administrador"
         possui_vinculo_administrativo = bool(
             usuario["id_administrador"]
@@ -1231,7 +1547,8 @@ def editar_usuario(id_usuario):
                 usuario_admin=usuario.get("usuario_admin") or "",
                 categoria_selecionada=categoria_selecionada,
                 eh_administrador=eh_administrador,
-                conta_administrativa_existente=eh_administrador
+                conta_administrativa_existente=eh_administrador,
+                foto_facial=foto_facial
             )
 
         nome = request.form.get("nome", "").strip()
@@ -1275,6 +1592,7 @@ def editar_usuario(id_usuario):
                 ),
                 eh_administrador=eh_administrador,
                 conta_administrativa_existente=eh_administrador,
+                foto_facial=foto_facial,
                 erro=mensagem
             )
 
@@ -1660,6 +1978,7 @@ def editar_usuario(id_usuario):
                 conta_administrativa_existente=(
                     usuario["categoria"] == "administrador"
                 ),
+                foto_facial=foto_facial,
                 erro="Esse nome de usuário já está sendo utilizado."
             )
 
@@ -2113,4 +2432,3 @@ if __name__ == "__main__":
         iniciar_sincronizacao()
 
     app.run(debug=DEBUG)
-

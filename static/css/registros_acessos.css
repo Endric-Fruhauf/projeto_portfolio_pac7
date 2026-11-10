@@ -14,26 +14,15 @@
     box-sizing: border-box;
 }
 
-.records-page-header {
-    margin-bottom: 28px;
-}
-
-.records-page-header h2 {
-    color: #f9fafb;
-}
-
-.records-page-header p {
-    color: #9ca3af;
-}
-
+.records-page-header { margin-bottom: 28px; }
+.records-page-header h2 { color: #f9fafb; }
+.records-page-header p { color: #9ca3af; }
 
 /* =========================================
    TÍTULOS DAS SEÇÕES
 ========================================= */
 
-.records-section-heading {
-    margin-bottom: 22px;
-}
+.records-section-heading { margin-bottom: 22px; }
 
 .records-section-heading h3 {
     margin: 0 0 6px;
@@ -48,7 +37,6 @@
     font-size: 13px;
 }
 
-
 /* =========================================
    ÁREA DE FILTROS
 ========================================= */
@@ -57,7 +45,6 @@
     width: 100%;
     margin: 0 0 26px;
     padding: 24px;
-
     background: #1f2937;
     border: 1px solid #374151;
     border-radius: 10px;
@@ -68,10 +55,8 @@
     grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
     align-items: end;
     gap: 16px;
-
     width: 100%;
 }
-
 
 /* =========================================
    CAMPOS
@@ -81,48 +66,31 @@
     display: flex;
     flex-direction: column;
     gap: 9px;
-
     min-width: 0;
 }
 
 .records-page .records-filter-field label {
-    display: block;
     color: #cbd5e1;
     font-size: 13px;
     font-weight: 600;
 }
 
-.records-page .records-filter-field input,
-.records-page .records-filter-field input[type="search"],
-.records-page .records-filter-field input[type="date"] {
+.records-page .records-filter-field input {
     display: block;
     width: 100%;
     height: 44px;
     min-width: 0;
-
     padding: 0 12px;
-
-    appearance: auto;
-    -webkit-appearance: auto;
-
-    background-color: #111827 !important;
     background: #111827 !important;
-
     border: 1px solid #3b4658 !important;
     border-radius: 7px !important;
-
     color: #f3f4f6 !important;
     -webkit-text-fill-color: #f3f4f6;
-
     font-family: Arial, sans-serif;
     font-size: 13px;
-
     outline: none;
     box-shadow: none;
-
     color-scheme: dark;
-
-    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .records-page .records-filter-field input:hover {
@@ -131,7 +99,7 @@
 
 .records-page .records-filter-field input:focus {
     border-color: #3b82f6 !important;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .15) !important;
 }
 
 .records-page .records-filter-field input::placeholder {
@@ -139,7 +107,6 @@
     -webkit-text-fill-color: #6b7280;
     opacity: 1;
 }
-
 
 /* =========================================
    BOTÕES
@@ -157,27 +124,22 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-
     height: 44px;
     padding: 0 17px;
-
     border-radius: 7px;
     border: 1px solid transparent;
-
     font-family: Arial, sans-serif;
     font-size: 13px;
     font-weight: 600;
     text-decoration: none;
-
     white-space: nowrap;
     cursor: pointer;
-
-    transition: background-color 0.2s, border-color 0.2s;
+    transition: background-color .2s, border-color .2s;
 }
 
 .records-page .btn-filter {
     background: #2563eb !important;
-    color: #ffffff !important;
+    color: #fff !important;
     border-color: #2563eb !important;
 }
 
@@ -197,7 +159,6 @@
     border-color: #64748b !important;
 }
 
-
 /* =========================================
    CONTAINER DO HISTÓRICO
 ========================================= */
@@ -205,14 +166,11 @@
 .records-page .records-table-container {
     width: 100%;
     margin: 0;
-
     overflow: hidden;
-
     background: #1f2937;
     border: 1px solid #374151;
     border-radius: 10px;
 }
-
 
 /* =========================================
    CABEÇALHO DO HISTÓRICO
@@ -222,17 +180,14 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-
     min-height: 82px;
     padding: 19px 23px;
-
     background: #1f2937;
     border-bottom: 1px solid #374151;
 }
 
 .records-page .records-table-header h3 {
     margin: 0 0 6px;
-
     color: #f9fafb;
     font-size: 16px;
     font-weight: 600;
@@ -240,11 +195,9 @@
 
 .records-page .records-table-header p {
     margin: 0;
-
     color: #9ca3af;
     font-size: 13px;
 }
-
 
 /* =========================================
    TABELA
@@ -259,84 +212,51 @@
 
 .records-page .records-table {
     width: 100%;
-    min-width: 720px;
-
+    min-width: 960px;
     border-collapse: collapse;
     border-spacing: 0;
-
     text-align: left;
 }
-
-
-/* Cabeçalho das colunas */
 
 .records-page .records-table thead th {
     height: 49px;
     padding: 0 18px;
-
     background: #172233 !important;
     color: #aebbd0 !important;
-
     border-right: 1px solid #374151;
     border-bottom: 1px solid #3b4658;
-
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.7px;
+    letter-spacing: .7px;
     text-transform: uppercase;
-
     white-space: nowrap;
 }
 
-
 /* Largura das colunas */
 
-.records-page .records-table .column-id {
-    width: 75px;
-}
-
-.records-page .records-table .column-user {
-    width: 30%;
-}
-
-.records-page .records-table .column-date {
-    width: 27%;
-}
-
-.records-page .records-table .column-event {
-    width: 115px;
-}
-
-.records-page .records-table .column-device {
-    width: 170px;
-}
-
+.records-page .records-table .column-id { width: 100px; }
+.records-page .records-table .column-user { width: 23%; }
+.records-page .records-table .column-date { width: 23%; }
+.records-page .records-table .column-origin { width: 17%; }
+.records-page .records-table .column-event { width: 20%; }
+.records-page .records-table .column-device { width: 150px; }
 
 /* Células */
 
 .records-page .records-table tbody td {
-    height: 62px;
+    min-height: 62px;
     padding: 12px 18px;
-
     background: #1f2937 !important;
     color: #e5e7eb !important;
-
     border-right: 1px solid #374151;
     border-bottom: 1px solid #374151;
-
     font-size: 13px;
     vertical-align: middle;
 }
 
-
-/* Hover */
-
 .records-page .records-table tbody tr:hover td {
     background: #263449 !important;
 }
-
-
-/* Bordas finais */
 
 .records-page .records-table th:last-child,
 .records-page .records-table td:last-child {
@@ -347,7 +267,6 @@
     border-bottom: none;
 }
 
-
 /* =========================================
    DADOS DAS CÉLULAS
 ========================================= */
@@ -356,6 +275,7 @@
     color: #9ca3af !important;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 .records-page .record-user {
@@ -380,36 +300,80 @@
     font-variant-numeric: tabular-nums;
 }
 
-
-/* Código do evento */
-
 .records-page .event-code {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-
-    min-width: 36px;
-    height: 27px;
+    min-height: 27px;
     padding: 0 9px;
-
     background: #303e52;
     border: 1px solid #475569;
     border-radius: 5px;
-
     color: #e2e8f0;
     font-size: 12px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
 }
 
-
-/* Usuário não identificado */
-
 .records-page .unknown-user {
     color: #fbbf24;
     font-size: 12px;
 }
 
+/* =========================================
+   IDENTIFICAÇÃO DA ORIGEM
+========================================= */
+
+.records-page .origin-badge,
+.records-page .result-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 4px 9px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.records-page .origin-facial {
+    color: #bfdbfe;
+    background: #1e3a5f;
+    border-color: #315783;
+}
+
+.records-page .origin-remote {
+    color: #ddd6fe;
+    background: #3b2f62;
+    border-color: #59468b;
+}
+
+/* =========================================
+   RESULTADO DA ABERTURA REMOTA
+========================================= */
+
+.records-page .result-success {
+    color: #bbf7d0;
+    background: #17452f;
+    border-color: #286746;
+}
+
+.records-page .result-failure {
+    color: #fecaca;
+    background: #55252b;
+    border-color: #873942;
+}
+
+.records-page .record-detail {
+    display: block;
+    max-width: 260px;
+    margin-top: 5px;
+    color: #9ca3af;
+    font-size: 11px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
 
 /* =========================================
    TABELA VAZIA
@@ -418,7 +382,6 @@
 .records-page .records-empty {
     height: 120px !important;
     padding: 25px !important;
-
     text-align: center;
     background: #1f2937 !important;
 }
@@ -439,7 +402,6 @@
     font-size: 12px;
 }
 
-
 /* =========================================
    MENSAGEM DE ERRO
 ========================================= */
@@ -447,22 +409,18 @@
 .records-page .records-error {
     margin: 0 0 20px;
     padding: 14px 16px;
-
     background: #3b1f27;
     border: 1px solid #7f303b;
     border-radius: 8px;
-
     color: #fecaca;
     font-size: 13px;
 }
-
 
 /* =========================================
    TABLETS
 ========================================= */
 
 @media (max-width: 1100px) {
-
     .records-page .records-filters-container form {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
@@ -474,16 +432,13 @@
     .records-page .records-filter-buttons {
         align-self: end;
     }
-
 }
-
 
 /* =========================================
    CELULARES
 ========================================= */
 
 @media (max-width: 600px) {
-
     .records-page-header {
         margin-bottom: 20px;
     }
@@ -518,23 +473,18 @@
         padding: 17px;
     }
 
-    .records-page .records-table thead th {
-        padding: 0 14px;
-    }
-
+    .records-page .records-table thead th,
     .records-page .records-table tbody td {
-        padding: 12px 14px;
+        padding-left: 14px;
+        padding-right: 14px;
     }
-
 }
-
 
 /* =========================================
    CELULARES PEQUENOS
 ========================================= */
 
 @media (max-width: 380px) {
-
     .records-page .records-filter-buttons {
         flex-direction: column;
         align-items: stretch;
@@ -545,5 +495,4 @@
         width: 100%;
         flex: auto;
     }
-
 }
